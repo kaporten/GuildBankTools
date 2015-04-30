@@ -31,11 +31,9 @@ end
 
 -- Whenever bank tab is changed, interrupt stacking (if it is in progress) and calc stackability
 function GuildBankTools:OnGuildBankTab(guildOwner, nTab)	
-	Print("OnGuildBankTab")
 	-- Load-once; Search for the Bank window, attach overlay form if not already done
 	local guildBankAddon = Apollo.GetAddon("GuildBank")
 	if guildBankAddon ~= nil and self.xmlDoc ~= nil and (self.wndOverlayForm == nil or guildBankAddon.tWndRefs.wndMain:FindChild("GuildBankToolsForm") == nil) then		
-		Print("Loading form")
 		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", guildBankAddon.tWndRefs.wndMain, self)			
 	end
 
@@ -49,7 +47,6 @@ end
 -- React to bank changes by re-calculating stackability
 -- If stacking is in progress, mark progress on the current stacking (pendingUpdates)
 function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUpdated, bRemoved)
-	Print("OnGuildBankItem")
 	self:UpdateStackableList(guildOwner, nTab)
 	
 	-- Remove pending update-event matched by this update-event (if any)
@@ -69,7 +66,6 @@ end
 
 -- Identifies which slots can be stacked. Table of stackable slots is stored in self.tStackable
 function GuildBankTools:UpdateStackableList(guildOwner, nTab)
-	Print("UpdateStackableList")
 	-- Build table containing 
 	--  key = itemId, 
 	--  value = list of stackable slots
