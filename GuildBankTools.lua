@@ -336,6 +336,11 @@ function GuildBankTools:IsUsable(itemInSlot)
 		return false
 	end
 	
+	-- Weapon profficiency requirement
+	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.tProfRequirement) == "table" and not tDetails.tPrimary.tProfRequirement.bRequirementMet then
+		return false
+	end
+	
 	-- Schematics must be learnable and unknown
 	-- Item family 19 = schematic. Can't find the darn enum anywhere :(. So here's some examples:
 	--[[
