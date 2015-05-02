@@ -26,6 +26,7 @@ function GuildBankTools:new(o)
 end
 
 function GuildBankTools:Init()
+	self.tSettings = self.tSettings or {}
 	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank"})	
 end
 
@@ -73,8 +74,8 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	if GB ~= nil and self.xmlDoc ~= nil and (self.wndOverlayForm == nil or GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") == nil) then
 		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, self)					
 		-- Restore usable-check to whatever it was during last session (not saved, just last open bank)
-		if self.bUsableOnly ~= nil then			
-			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.bUsableOnly)
+		if self.tSettings.bUsableOnly ~= nil then			
+			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.tSettings.bUsableOnly)
 		end
 	end
 
@@ -403,13 +404,37 @@ end
 
 --[[ React to the usable-checkbox --]]
 function GuildBankTools:OnUsableButton_ButtonCheck(wndHandler, wndControl, eMouseButton)
-	self.bUsableOnly = true
+	self.tSettings.bUsableOnly = true
 	self:HighlightSearchMatches()
 end
 function GuildBankTools:OnUsableButton_ButtonUncheck(wndHandler, wndControl, eMouseButton)
-	self.bUsableOnly = false
+	self.tSettings.bUsableOnly = false
 	self:HighlightSearchMatches()	
 end
+
+
+--[[ Settings save/restore --]]
+-- Save addon config per character. Called by engine when performing a controlled game shutdown.
+function GuildBankTools:OnSave(eType)
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
+		return 
+	end
+	
+	-- Simply save the entire tSettings structure
+	return self.tSettings
+end
+
+-- Restore addon config per character. Called by engine when loading UI.
+function GuildBankTools:OnRestore(eType, tSavedData)
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
+		return 
+	end
+	
+	-- Store saved settings self for Settings-controlled load during main addon init
+	self.tSettings = tSavedData
+end
+
+
 
 
 -- Standard addon initialization
