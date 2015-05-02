@@ -70,8 +70,12 @@ end
 -- Whenever bank tab is changed, interrupt stacking (if it is in progress) and calc stackability
 function GuildBankTools:OnGuildBankTab(guildOwner, nTab)	
 	-- First-hit form loading when the items (vault) tab is shown	
-	if GB ~= nil and self.xmlDoc ~= nil and (self.wndOverlayForm == nil or GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") == nil) then		
+	if GB ~= nil and self.xmlDoc ~= nil and (self.wndOverlayForm == nil or GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") == nil) then
 		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, self)					
+		-- Restore usable-check to whatever it was during last session (not saved, just last open bank)
+		if self.bUsableOnly ~= nil then			
+			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.bUsableOnly)
+		end
 	end
 
 	-- Store refs to current visible tab and guild
@@ -394,9 +398,11 @@ end
 
 --[[ React to the usable-checkbox --]]
 function GuildBankTools:OnUsableButton_ButtonCheck(wndHandler, wndControl, eMouseButton)
+	self.bUsableOnly = true
 	self:HighlightSearchMatches()
 end
 function GuildBankTools:OnUsableButton_ButtonUncheck(wndHandler, wndControl, eMouseButton)
+	self.bUsableOnly = false
 	self:HighlightSearchMatches()	
 end
 
