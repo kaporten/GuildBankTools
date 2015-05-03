@@ -129,6 +129,9 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	if self.bIsStacking == true and self.pendingStackEvents ~= nil and #self.pendingStackEvents == 0 then
 		self:Stack()
 	end	
+	
+	-- Once all real processing is done, update the filtering if needed
+	self:HighlightSearchMatches()	
 end
 
 
@@ -191,9 +194,6 @@ end
 function GuildBankTools:Stack()
 	-- Set flag for retriggering another stack after this one	
 	self.bIsStacking = true
-
-	-- Reset opacity to search matches, then stack
-	self:HighlightSearchMatches()
 	
 	-- Safeguard, but should only happen if someone calls :Stack() before opening the guild bank
 	if self.tStackable == nil then
