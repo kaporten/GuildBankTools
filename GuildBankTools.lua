@@ -87,7 +87,7 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	self.bIsStacking = false
 	
 	-- Calculate list of stackable items
-	self.tStackable = self:IdentifyStackableItems()
+	self:IdentifyStackableItems()
 	
 	-- TODO update filtering style/passes
 	-- Ensure all items are visible when changing tabs
@@ -123,7 +123,7 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	end
 		
 	-- Re-calculate stackable items list
-	self.tStackable = self:IdentifyStackableItems()
+	self:IdentifyStackableItems()
 
 	-- If stacking is in progress - and last pending update was just completed - continue stacking
 	if self.bIsStacking == true and self.pendingStackEvents ~= nil and #self.pendingStackEvents == 0 then
@@ -162,11 +162,12 @@ function GuildBankTools:IdentifyStackableItems()
 			tStackable[#tStackable+1] = tSlots
 		end
 	end
+
+	-- Store in addon scope
+	self.tStackable = tStackable
 	
-	-- Update the button accordingly
+	-- Update Stack button enable-status
 	self:UpdateStackButton()
-	
-	return tStackable
 end
 
 function GuildBankTools:UpdateStackButton()
@@ -387,6 +388,13 @@ end
 function GuildBankTools:OnSearchEditBox_EditBoxChanged(wndHandler, wndControl, strText)
 	-- Content changed, highlight matches
 	self:HighlightSearchMatches()
+	
+	local strSearch = self.wndOverlayForm:FindChild("SearchEditBox"):GetText()
+	if strSearch ~= nil and strSearch ~= "" then
+		self.wndOverlayForm:FindChild("ClearSearchButton"):Show(true)
+	else
+		self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
+	end
 end
 function GuildBankTools:OnSearchEditBox_WindowGainedFocus(wndHandler, wndControl)
 	-- Focus gained, hide the background "Search for..." text
@@ -401,6 +409,17 @@ function GuildBankTools:OnSearchEditBox_WindowLostFocus(wndHandler, wndControl)
 		self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(true)
 	end
 end
+function GuildBankTools:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
+	-- Clear search criteria
+	self.wndOverlayForm:FindChild("SearchEditBox"):SetText("")
+	self.wndOverlayForm:FindChild("SearchEditBox"):ClearFocus()
+	self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(true)
+	self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
+	
+	self:HighlightSearchMatches()
+end
+
+
 
 --[[ React to the usable-checkbox --]]
 function GuildBankTools:OnUsableButton_ButtonCheck(wndHandler, wndControl, eMouseButton)
@@ -433,8 +452,6 @@ function GuildBankTools:OnRestore(eType, tSavedData)
 	-- Store saved settings self for Settings-controlled load during main addon init
 	self.tSettings = tSavedData
 end
-
-
 
 
 -- Standard addon initialization
