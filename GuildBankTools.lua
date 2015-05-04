@@ -100,7 +100,7 @@ end
 function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUpdated, bRemoved)
 	-- Ignore events if toolbar is not visible 
 	-- (don't bother updating if people change stuff while you're not at the bank)
-	if self.wndOverlayForm == nil or not self.wndOverlayForm:IsVisible() then
+	if self.wndOverlayForm == nil or self.wndOverlayForm:FindChild("ContentArea") == nil or (not self.wndOverlayForm:FindChild("ContentArea"):IsShown()) then
 		return
 	end
 	
