@@ -239,7 +239,7 @@ end
 
 -- Highlight all items-to-stack on the current tab
 function GuildBankTools:HighlightStackables()
-	-- Build lookuptable of all stackable ids. key=bank slot index, value=true (value not used).
+	-- Build lookuptable of all stackable indices. Key=bank slot index, Value=true (value not used).
 	local tStackableSlotIdx = {}
 	for _,tStackableItem in ipairs(self.tStackable) do
 		for _,tSlot in ipairs(tStackableItem) do
@@ -247,8 +247,7 @@ function GuildBankTools:HighlightStackables()
 		end		
 	end
 		
-	-- Go through all filled slots in the current tab and highlight all which contains a stackable itemId
-	-- (Or, more correctly: dim down those who DON'T)
+	-- Go through all bank wnd-slots, and set visibility according to tStackableSlotIdx list
 	if GB ~= nil then
 		for i,wndSlot in ipairs(GB.tWndRefs.tBankItemSlots) do
 			if tStackableSlotIdx[i] ~= nil then
