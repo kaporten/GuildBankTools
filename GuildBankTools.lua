@@ -88,16 +88,7 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	
 	-- Calculate list of stackable items
 	self:IdentifyStackableItems()
-	
-	-- TODO update filtering style/passes
-	-- Ensure all items are visible when changing tabs
-	--[[ 
-		This is done, even if a search pattern is available, 
-		to ensure that match-status is reset for empty bank slots as well.
-		(HighlightSearchMatches only touches bank slots with items)
-	--]]
-	self:ResetHighlights()
-	
+		
 	-- Then highlight any search criteria matches
 	self:HighlightSearchMatches()
 end
@@ -248,23 +239,23 @@ end
 
 -- Highlight all items-to-stack on the current tab
 function GuildBankTools:HighlightStackables()
-	-- Build lookuptable of all stackable ids. key=itemId, value=true (value not used).
-	local tStackableItemIds = {}
-	for _,tStackableSlot in ipairs(self.tStackable) do
-		tStackableItemIds[tStackableSlot[1].itemInSlot:GetItemId()] = true
+	-- Build lookuptable of all stackable ids. key=bank slot index, value=true (value not used).
+	local tStackableSlotIdx = {}
+	for _,tStackableItem in ipairs(self.tStackable) do
+		for _,tSlot in ipairs(tStackableItem) do
+			tStackableSlotIdx[tSlot.nIndex] = true
+		end		
 	end
 		
 	-- Go through all filled slots in the current tab and highlight all which contains a stackable itemId
 	-- (Or, more correctly: dim down those who DON'T)
 	if GB ~= nil then
-		for _,tSlot in ipairs(self.guildOwner:GetBankTab(self.nTab)) do
-			if tSlot ~= nil and tSlot.itemInSlot ~= nil then
-				if tStackableItemIds[tSlot.itemInSlot:GetItemId()] ~= nil then
-					GB.tWndRefs.tBankItemSlots[tSlot.nIndex]:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Visible)
-				else
-					GB.tWndRefs.tBankItemSlots[tSlot.nIndex]:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Hidden)
-				end
-			end
+		for i,wndSlot in ipairs(GB.tWndRefs.tBankItemSlots) do
+			if tStackableSlotIdx[i] ~= nil then
+				wndSlot:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Visible)
+			else
+				wndSlot:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Hidden)
+			end			
 		end
 	end	
 end
@@ -373,15 +364,6 @@ function GuildBankTools:IsUsable(itemInSlot)
 
 	-- Nothing borked up the match yet, item must be usable
 	return true
-end
-
--- Go through all GUI slots in the bank tab, reset opacity on all
-function GuildBankTools:ResetHighlights()
-	if GB ~= nil then
-		for _,wndSlot in ipairs(GB.tWndRefs.tBankItemSlots) do
-			wndSlot:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Visible)
-		end
-	end
 end
 
 --[[ React to changes to the search editbox --]]
