@@ -73,7 +73,8 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	-- First-hit form loading when the items (vault) tab is shown	
 	if GB ~= nil and self.xmlDoc ~= nil and (self.wndOverlayForm == nil or GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") == nil) then
 		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, self)					
-		-- Restore usable-check to whatever it was during last session (not saved, just last open bank)
+		
+		-- Restore usable-items-only checkbox to previously saved state from tSettings
 		if self.tSettings.bUsableOnly ~= nil then			
 			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.tSettings.bUsableOnly)
 		end
@@ -382,7 +383,7 @@ function GuildBankTools:OnSearchEditBox_WindowGainedFocus(wndHandler, wndControl
 	self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(false)
 end
 function GuildBankTools:OnSearchEditBox_WindowLostFocus(wndHandler, wndControl)
-	-- Focus lost, show background text, if no search criteria is entered
+	-- Focus lost, show background text if no search criteria is entered
 	local strSearch = self.wndOverlayForm:FindChild("SearchEditBox"):GetText()
 	if strSearch ~= nil and strSearch ~= "" then
 		self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(false)
@@ -391,7 +392,7 @@ function GuildBankTools:OnSearchEditBox_WindowLostFocus(wndHandler, wndControl)
 	end
 end
 function GuildBankTools:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
-	-- Clear search criteria
+	-- Clicking the clear-button drops focus, clears text and hides the button
 	self.wndOverlayForm:FindChild("SearchEditBox"):SetText("")
 	self.wndOverlayForm:FindChild("SearchEditBox"):ClearFocus()
 	self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(true)
@@ -430,7 +431,7 @@ function GuildBankTools:OnRestore(eType, tSavedData)
 		return 
 	end
 	
-	-- Store saved settings self for Settings-controlled load during main addon init
+	-- Restored savedata are just stored directly as tSettings
 	self.tSettings = tSavedData
 end
 
