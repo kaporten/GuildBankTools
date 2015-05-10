@@ -378,24 +378,14 @@ function GuildBankTools:OnSearchEditBox_EditBoxChanged(wndHandler, wndControl, s
 		self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
 	end
 end
-function GuildBankTools:OnSearchEditBox_WindowGainedFocus(wndHandler, wndControl)
-	-- Focus gained, hide the background "Search for..." text
-	self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(false)
-end
 function GuildBankTools:OnSearchEditBox_WindowLostFocus(wndHandler, wndControl)
 	-- Focus lost, show background text if no search criteria is entered
 	local strSearch = self.wndOverlayForm:FindChild("SearchEditBox"):GetText()
-	if strSearch ~= nil and strSearch ~= "" then
-		self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(false)
-	else
-		self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(true)
-	end
 end
 function GuildBankTools:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
 	-- Clicking the clear-button drops focus, clears text and hides the button
 	self.wndOverlayForm:FindChild("SearchEditBox"):SetText("")
 	self.wndOverlayForm:FindChild("SearchEditBox"):ClearFocus()
-	self.wndOverlayForm:FindChild("SearchBackgroundText"):Show(true)
 	self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
 	
 	self:HighlightSearchMatches()
