@@ -361,6 +361,20 @@ function GuildBankTools:IsUsable(itemInSlot)
 			return false
 		end
 	end
+	
+	-- Catalysts (NB: Some catalysts lack the tCatalyst info structure and will not be hidden accordingly)
+	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.tCatalyst) == "table" then
+		local bKnown = false
+		for _,skill in ipairs(CraftingLib.GetKnownTradeskills()) do
+			if skill.eId == tDetails.tPrimary.tCatalyst.eTradeskill then
+				bKnown = true
+			end
+		end
+		
+		if not bKnown then
+			return false
+		end
+	end
 
 	-- Nothing borked up the match yet, item must be usable
 	return true
