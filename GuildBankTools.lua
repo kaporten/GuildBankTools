@@ -392,10 +392,7 @@ function GuildBankTools:OnSearchEditBox_EditBoxChanged(wndHandler, wndControl, s
 		self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
 	end
 end
-function GuildBankTools:OnSearchEditBox_WindowLostFocus(wndHandler, wndControl)
-	-- Focus lost, show background text if no search criteria is entered
-	local strSearch = self.wndOverlayForm:FindChild("SearchEditBox"):GetText()
-end
+
 function GuildBankTools:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
 	-- Clicking the clear-button drops focus, clears text and hides the button
 	self.wndOverlayForm:FindChild("SearchEditBox"):SetText("")
