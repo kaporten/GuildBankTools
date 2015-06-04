@@ -7,6 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
+local Major, Minor, Patch = 1, 8, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -48,6 +49,8 @@ function GuildBankTools:OnLoad()
 	-- Hook into GuildBank to react to main-tab changes (not bank-vault tab changes, but f.ex. changing to the Money or Log tab)
 	self.Orig_GB_OnBankTabUncheck = GB.OnBankTabUncheck
 	GB.OnBankTabUncheck = self.Hook_GB_OnBankTabUncheck	
+	
+	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
 end
 
 function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)	
