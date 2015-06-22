@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 1, 8, 0
+local Major, Minor, Patch = 1, 9, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -27,6 +27,12 @@ function GuildBankTools:new(o)
 end
 
 function GuildBankTools:Init()
+	-- Only actually load GuildBankTools if it is not already loaded
+	-- This is to prevent double-loads caused by "guildbanktools" vs "GuildBankTools" dir renames
+	if Apollo.GetAddon("GuildBankTools") ~= nil then
+		return
+	end
+
 	self.tSettings = self.tSettings or {}
 	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank"})	
 end
