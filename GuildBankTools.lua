@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 1, 9, 0
+local Major, Minor, Patch = 1, 10, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -212,10 +212,22 @@ function GuildBankTools:Stack()
 		return
 	end
 
-	-- Move from last slot to first
-	local tTargetSlot = tSlots[1]
-	local tSourceSlot = tSlots[#tSlots]
-
+	-- Identify non-full slot with the least items (source to "eat")
+	local tSourceSlot = nil	
+	for _, tSlot in pairs(tSlots) do		
+		if tSourceSlot == nil or tSlot.itemInSlot:GetStackCount() < tSourceSlot.itemInSlot:GetStackCount() then
+			tSourceSlot = tSlot
+		end
+	end
+	
+	-- Identify non-full slot with the most items (target to fill up)
+	local tTargetSlot = nil
+	for _, tSlot in pairs(tSlots) do		
+		if tTargetSlot == nil or tSlot.itemInSlot:GetStackCount() > tTargetSlot.itemInSlot:GetStackCount() then
+			tTargetSlot = tSlot
+		end
+	end
+	
 	-- Determine current stack move size
 	local nRoomInTargetSlot = tSourceSlot.itemInSlot:GetMaxStackCount() - tTargetSlot.itemInSlot:GetStackCount()
 	local nItemsToMove = math.min(nRoomInTargetSlot, tSourceSlot.itemInSlot.GetStackCount())			
