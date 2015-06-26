@@ -212,7 +212,7 @@ function GuildBankTools:Stack()
 		return
 	end
 
-	-- Identify non-full slot with the least items (source to "eat")
+	-- Identify source (smallest) and target (largest) stacks
 	local tSourceSlot, tTargetSlot
 	for _, tSlot in pairs(tSlots) do		
 		if tSourceSlot == nil or tSlot.itemInSlot:GetStackCount() < tSourceSlot.itemInSlot:GetStackCount() then
