@@ -87,6 +87,11 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 		if self.tSettings.bUsableOnly ~= nil then			
 			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.tSettings.bUsableOnly)
 		end
+		
+		-- Localization hack - german/french texts for "Usable items only" are considerbly longer than english ones, so reduce font-size for non-EN
+		if Apollo.GetString(1) ~= "Cancel" then
+			self.wndOverlayForm:FindChild("UsableButtonLabel"):SetFont("CRB_InterfaceTiny_BB")
+		end
 	end
 
 	-- Store refs to current visible tab and guild
