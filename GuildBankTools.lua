@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 1, 11, 0
+local Major, Minor, Patch = 1, 10, 1
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -215,11 +215,15 @@ function GuildBankTools:Stack()
 	-- Identify source (smallest) and target (largest) stacks
 	local tSourceSlot, tTargetSlot
 	for _, tSlot in pairs(tSlots) do		
-		if tSourceSlot == nil or tSlot.itemInSlot:GetStackCount() < tSourceSlot.itemInSlot:GetStackCount() then
+		if (tSourceSlot == nil) or -- Accept first hit as source
+			(tSlot.itemInSlot:GetStackCount() < tSourceSlot.itemInSlot:GetStackCount() or -- Current slot has fewer items
+			(tSlot.itemInSlot:GetStackCount() == tSourceSlot.itemInSlot:GetStackCount()) and tSlot.nIndex > tSourceSlot.nIndex) then -- Current slot has same number of items, but is at a higher index			
 			tSourceSlot = tSlot
 		end
-		
-		if tTargetSlot == nil or tSlot.itemInSlot:GetStackCount() > tTargetSlot.itemInSlot:GetStackCount() then
+
+		if (tTargetSlot == nil) or -- Accept first hit as target
+			(tSlot.itemInSlot:GetStackCount() > tTargetSlot.itemInSlot:GetStackCount() or -- Current slot has more items
+			(tSlot.itemInSlot:GetStackCount() == tTargetSlot.itemInSlot:GetStackCount()) and tSlot.nIndex < tTargetSlot.nIndex) then -- Current slot has same number of items, but is at a lower index
 			tTargetSlot = tSlot
 		end		
 	end
