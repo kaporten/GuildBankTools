@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 1, 10, 1
+local Major, Minor, Patch = 1, 11, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
