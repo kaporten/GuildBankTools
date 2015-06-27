@@ -29,4 +29,5 @@
             </Control>
         </Control>
     </Form>
+    <Form Class="Window" LAnchorPoint="0" LAnchorOffset="0" TAnchorPoint="0" TAnchorOffset="0" RAnchorPoint="1" RAnchorOffset="0" BAnchorPoint="1" BAnchorOffset="0" RelativeToClient="1" Font="Default" Text="" BGColor="UI_WindowBGDefault" TextColor="UI_WindowTextDefault" Template="Default" TooltipType="OnCursor" Name="TabHighlightForm" Border="1" Picture="1" SwallowMouseClicks="1" Moveable="0" Escapable="1" Overlapped="1" TooltipColor="" Tooltip="" Sprite="CRB_Anim_Outline:spr_Anim_OutlineStretch" Visible="0" NewWindowDepth="1" IgnoreMouse="1"/>
 </Forms>

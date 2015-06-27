@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 1, 11, 0
+local Major, Minor, Patch = 2, 0, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -88,6 +88,13 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.tSettings.bUsableOnly)
 		end
 		
+		-- Load bank-tab highlight forms
+		self.tTabHighlights = {}
+		for n = 1,5 do
+			local wndBankTab = GB.tWndRefs.wndMain:FindChild("BankTabBtn" .. n)
+			self.tTabHighlights[n] = Apollo.LoadForm(self.xmlDoc, "TabHighlightForm", wndBankTab, self)								
+		end
+		
 		-- Localization hack - german/french texts for "Usable items only" are considerbly longer than english ones, so reduce font-size for non-EN
 		if Apollo.GetString(1) ~= "Cancel" then
 			self.wndOverlayForm:FindChild("UsableButtonLabel"):SetFont("CRB_InterfaceTiny_BB")
@@ -95,7 +102,7 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	end
 
 	-- Store refs to current visible tab and guild
-	self.nTab = nTab
+	self.nCurrentTab = nTab
 	self.guildOwner = guildOwner
 	
 	-- Changed tab, interrupt any in-progress stacking
@@ -147,7 +154,7 @@ function GuildBankTools:IdentifyStackableItems()
 	-- This includes stackables with just 1 stack (ie. nothing to stack with)
 	-- tStackableItems is a table with key=itemId, value=list of slots containing this itemId
 	local tStackableItems = {}
-	for _,tSlot in ipairs(self.guildOwner:GetBankTab(self.nTab)) do
+	for _,tSlot in ipairs(self.guildOwner:GetBankTab(self.nCurrentTab)) do
 		if tSlot ~= nil and self:IsItemStackable(tSlot.itemInSlot) then
 			local nItemId = tSlot.itemInSlot:GetItemId()
 			
@@ -244,7 +251,7 @@ function GuildBankTools:Stack()
 	self.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, nItemsToMove)
 	
 	-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
-	self.guildOwner:EndBankItemTransfer(self.nTab, tTargetSlot.nIndex) 
+	self.guildOwner:EndBankItemTransfer(self.nCurrentTab, tTargetSlot.nIndex) 
 end
 
 -- When the stack-button is clicked, just execute the stack operation
@@ -300,32 +307,60 @@ function GuildBankTools:HighlightSearchMatches()
 	local bPerformUsableCheck = self.wndOverlayForm:FindChild("UsableButton"):IsChecked()
 
 	if GB ~= nil then
-		for _,tSlot in ipairs(self.guildOwner:GetBankTab(self.nTab)) do			
-			if tSlot ~= nil and tSlot.itemInSlot ~= nil then
-				-- Default: all checks pass
-				local bSearchOK, bUsableOK = true, true
+		-- Check all tabs for search-hits
+		for nTab,wndHighlight in ipairs(self.tTabHighlights) do
+			-- Indicates if this tab has any search matches
+			local bSearchMatchesOnTab = false
+			
+			local tTab = self.guildOwner:GetBankTab(nTab)
+			if tTab ~= nil then
+				for _,tSlot in ipairs(tTab) do				
+					if tSlot ~= nil and tSlot.itemInSlot ~= nil then
+						-- Default: all checks pass
+						local bSearchOK, bUsableOK = true, true
 
-				-- Check match against search string
-				if bPerformSearch then
-					-- Search criteria present, only show matches
-					if string.match(tSlot.itemInSlot:GetName():lower(), strSearch) ~= nil then
-						-- Match, keep visible
-						bSearchOK = true
-					else
-						-- No match, hide
-						bSearchOK = false
+						-- Check match against search string
+						if bPerformSearch then
+							-- Search criteria present, only show matches
+							if string.match(tSlot.itemInSlot:GetName():lower(), strSearch) ~= nil then
+								-- Match, keep visible
+								bSearchOK = true							
+							else
+								-- No match, hide
+								bSearchOK = false
+							end
+						end
+						
+						-- Check usability
+						if bPerformUsableCheck then
+							bUsableOK = self:IsUsable(tSlot.itemInSlot)				
+						end
+
+						
+						if nTab == self.nCurrentTab then
+							-- For current tab, show/hide individual items
+							local bShow = bSearchOK and bUsableOK
+							GB.tWndRefs.tBankItemSlots[tSlot.nIndex]:FindChild("BankItemIcon"):SetOpacity(bShow and enumOpacity.Visible or enumOpacity.Hidden)
+						else
+							-- For other tabs, just mark tab header for highlighting
+							if bPerformSearch and bSearchOK then -- Only highlight if search text is entered/matched								
+								if bPerformUsableCheck then
+									if bUsableOK then
+										-- Usable checked , and usable search-hit found on tab, set indicator
+										bSearchMatchesOnTab = true
+									end							
+								else
+									-- Search-hit on tab, usable-only not checked
+									bSearchMatchesOnTab = true
+								end
+							end
+						end						
 					end
 				end
-				
-				-- Check usability
-				if bPerformUsableCheck then
-					bUsableOK = self:IsUsable(tSlot.itemInSlot)				
-				end
-
-				-- Show/hide depending on previous checks
-				local bShow = bSearchOK and bUsableOK
-				GB.tWndRefs.tBankItemSlots[tSlot.nIndex]:FindChild("BankItemIcon"):SetOpacity(bShow and enumOpacity.Visible or enumOpacity.Hidden)
 			end
+						
+			-- Show or hide tab-match indicator based on search matches
+			wndHighlight:Show(bSearchMatchesOnTab)
 		end
 	end	
 end
