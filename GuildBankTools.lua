@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 2, 0, 0
+local Major, Minor, Patch = 2, 1, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -436,6 +436,11 @@ function GuildBankTools:IsUsable(itemInSlot)
 			return false
 		end
 	end
+	
+	-- Pets only have a arSpecialFailures property when they're already known
+	if tDetails.tPrimary ~= nil and tDetails.tPrimary.arSpecialFailures ~= nil then
+		return false
+	end	
 
 	-- Nothing borked up the match yet, item must be usable
 	return true
