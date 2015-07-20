@@ -65,7 +65,7 @@ function GuildBankTools:Sort()
 	-- Loop through bank-slots, stop at first slot with incorrect inventoryItemId
 	for idx,tSortedSlot in ipairs(self.tSortedSlots) do
 		if tSortedSlot.itemInSlot:GetInventoryId() ~= tCurrentSlots[idx].itemInSlot:GetInventoryId() then
-			Print("Mismatch at idx 0, should be " .. tSortedSlot.itemInSlot:GetName())
+			Print("Mismatch at idx " .. idx .. ", should be " .. tSortedSlot.itemInSlot:GetName())
 			return
 		end
 	end
