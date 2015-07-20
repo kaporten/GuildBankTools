@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Addon Author="porten" APIVersion="10" Name="GuildBankTools" Description="Various utilities for the guild bank">
-    <Script Name="GuildBankTools.lua"/>
     <Form Name="GuildBankTools.xml"/>
+    <Script Name="GuildBankTools.lua"/>
+	<!--
+	<Script Name="GuildBankTools_Search.lua"/>
+	<Script Name="GuildBankTools_Stack.lua"/>
+	-->
+    <Script Name="GuildBankTools_Sort.lua"/>
 </Addon>

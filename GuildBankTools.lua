@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 2, 1, 0
+local Major, Minor, Patch = 3, 0, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -111,6 +111,9 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	-- Calculate list of stackable items
 	self:IdentifyStackableItems()
 		
+	-- Calculate sorted list of items
+	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)
+	
 	-- Then highlight any search criteria matches
 	self:HighlightSearchMatches()
 end
@@ -125,28 +128,60 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	if self.wndOverlayForm == nil or self.wndOverlayForm:FindChild("ContentArea") == nil or (not self.wndOverlayForm:FindChild("ContentArea"):IsShown()) then
 		return
 	end
-	
-	-- Remove pending update-event matched by this update-event (if any)
-	if self.pendingStackEvents ~= nil and #self.pendingStackEvents > 0 then
-		for idx,nSlot in ipairs(self.pendingStackEvents) do
-			if nSlot == nInventorySlot then
-				table.remove(self.pendingStackEvents, idx)
-			end
-		end
-	end
 		
 	-- Re-calculate stackable items list
 	self:IdentifyStackableItems()
+	
+	-- Re-calculate sorted list of items
+	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)	
 
 	-- If stacking is in progress - and last pending update was just completed - continue stacking
-	if self.bIsStacking == true and self.pendingStackEvents ~= nil and #self.pendingStackEvents == 0 then
-		self:Stack()
+	if self.bIsStacking == true then
+		self:RemovePendingGuildBankEvent(self.pendingStackEvents, nInventorySlot, bRemoved)
+
+		if self:HasPendingGuildBankEvents(self.pendingStackEvents) == false then
+			self.timerStack = ApolloTimer.Create(0.0, false, "Stack", self)
+		end
 	end	
-	
+		
+	-- If sorting is in progress - and last pending update was just completed - continue stacking
+	if self.bIsSorting == true then
+		self:RemovePendingGuildBankEvent(self.pendingSortEvents, nInventorySlot, bRemoved)
+		
+		if self:HasPendingGuildBankEvents(self.pendingSortEvents) == false then
+			self.timerSort = ApolloTimer.Create(0.0, false, "Sort", self)
+		end
+	end	
+
 	-- Once all real processing is done, update the filtering if needed
 	self:HighlightSearchMatches()	
 end
 
+function GuildBankTools:RemovePendingGuildBankEvent(tPendingEvents, nUpdatedInventorySlot, bRemoved)
+	if tPendingEvents ~= nil and type(tPendingEvents[nUpdatedInventorySlot]) == "table" then
+		local tPending = tPendingEvents[nUpdatedInventorySlot]
+		for i,b in ipairs(tPending) do
+			if b == bRemoved then				
+				table.remove(tPending, i)
+			end
+			
+			if #tPending == 0 then
+				tPendingEvents[nUpdatedInventorySlot] = nil
+			end
+		end
+	end
+end
+
+function GuildBankTools:HasPendingGuildBankEvents(tPendingEvents)
+	if tPendingEvents == nil then
+		return false
+	end
+	
+	for k,v in pairs(tPendingEvents) do
+		return true
+	end
+	return false
+end
 
 -- Scans current guild bank tab, returns list containing list of stackable slots
 function GuildBankTools:IdentifyStackableItems()
@@ -243,9 +278,22 @@ function GuildBankTools:Stack()
 	-- Determine current stack move size
 	local nRoomInTargetSlot = tSourceSlot.itemInSlot:GetMaxStackCount() - tTargetSlot.itemInSlot:GetStackCount()
 	local nItemsToMove = math.min(nRoomInTargetSlot, tSourceSlot.itemInSlot.GetStackCount())			
-			
-	-- Make a note of slot-indices that are being updated. We need to await events for both slots before triggering next stack pass.
-	self.pendingStackEvents = {tTargetSlot.nIndex, tSourceSlot.nIndex}
+	
+	-- Make a note of slot-indices that are being updated. We need to await events for both slots before triggering next stack pass.	
+	local bPartialMove = nItemsToMove < tSourceSlot.itemInSlot.GetStackCount()
+	if bPartialMove then
+		-- Partial move (only part of source stack is moved into target) updates target and updates source
+		self.pendingStackEvents = {
+			[tTargetSlot.nIndex] = {false}, 
+			[tSourceSlot.nIndex] = {false}
+		}
+	else
+		-- Full move (entire source stack is moved into target) updates target and removes source
+		self.pendingStackEvents = {
+			[tTargetSlot.nIndex] = {false}, 
+			[tSourceSlot.nIndex] = {true}
+		}
+	end
 	
 	-- Fire off the update by beginning and ending the bank transfer from source to target.
 	self.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, nItemsToMove)
