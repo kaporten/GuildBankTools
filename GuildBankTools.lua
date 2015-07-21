@@ -34,7 +34,8 @@ function GuildBankTools:Init()
 	end
 
 	self.tSettings = self.tSettings or {}
-	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank"})	
+	self.nThrottleTimer = 0
+	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
 end
 
 function GuildBankTools:OnLoad()	
@@ -48,6 +49,7 @@ function GuildBankTools:OnLoad()
 	-- Register for bank-tab updated events
 	Apollo.RegisterEventHandler("GuildBankTab", "OnGuildBankTab", self) -- Guild bank tab opened/changed.
 	Apollo.RegisterEventHandler("GuildBankItem", "OnGuildBankItem", self) -- Guild bank tab contents changed.
+--	Apollo.RegisterEventHandler("GuildResult", "OnGuildResult", self) -- Guild alerts/events, such as "guild bank busy" when spamming changes
 
 	-- Load form for later use
 	self.xmlDoc = XmlDoc.CreateFromFile("GuildBankTools.xml")
@@ -55,6 +57,11 @@ function GuildBankTools:OnLoad()
 	-- Hook into GuildBank to react to main-tab changes (not bank-vault tab changes, but f.ex. changing to the Money or Log tab)
 	self.Orig_GB_OnBankTabUncheck = GB.OnBankTabUncheck
 	GB.OnBankTabUncheck = self.Hook_GB_OnBankTabUncheck	
+	
+	-- Hook into GuildAlerts to suppress the "guild bank busy" log message
+	local GA = Apollo.GetAddon("GuildAlerts")
+	self.Orig_GA_OnGuildResult = GB.OnGuildResult
+	GA.OnGuildResult = self.Hook_GA_OnGuildResult	
 	
 	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
 end
@@ -76,6 +83,25 @@ function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)
 		end
 	end
 end
+
+function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResult)	
+	local GBT = Apollo.GetAddon("GuildBankTools")
+	
+	if eResult ~= GuildLib.GuildResult_Busy then
+		-- Not the busy-signal, just let GuildAlerts handle it as usual
+		GBT.Orig_GB_OnBankTabUncheck(guildSender, strName, nRank, eResult)		
+	else
+		-- Bank complains that we're spamming, slow down a bit
+		Print("Guild bank busy, slowing down a bit...")
+		GBT.nThrottleTimer = 1
+		if GBT.bIsStacking then
+			GBT.timerStack = ApolloTimer.Create(GBT.nThrottleTimer, false, "Stack", GBT)
+		elseif GBT.bIsSorting then
+			GBT.timerSort = ApolloTimer.Create(GBT.nThrottleTimer, false, "Sort", GBT)
+		end
+	end
+end
+
 
 -- Whenever bank tab is changed, interrupt stacking (if it is in progress) and calc stackability
 function GuildBankTools:OnGuildBankTab(guildOwner, nTab)	
@@ -113,6 +139,7 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 		
 	-- Calculate sorted list of items
 	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)
+	self:UpdateSortButton()
 	
 	-- Then highlight any search criteria matches
 	self:HighlightSearchMatches()
@@ -134,13 +161,16 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	
 	-- Re-calculate sorted list of items
 	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)	
-
+	self:UpdateSortButton()
+	
 	-- If stacking is in progress - and last pending update was just completed - continue stacking
 	if self.bIsStacking == true then
 		self:RemovePendingGuildBankEvent(self.pendingStackEvents, nInventorySlot, bRemoved)
 
 		if self:HasPendingGuildBankEvents(self.pendingStackEvents) == false then
-			self.timerStack = ApolloTimer.Create(0.0, false, "Stack", self)
+			self.timerStack = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Stack", self)
+			self.nThrottleTimer = self.nThrottleTimer-1
+			self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottelTimer or 0
 		end
 	end	
 		
@@ -149,7 +179,9 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 		self:RemovePendingGuildBankEvent(self.pendingSortEvents, nInventorySlot, bRemoved)
 		
 		if self:HasPendingGuildBankEvents(self.pendingSortEvents) == false then
-			self.timerSort = ApolloTimer.Create(0.0, false, "Sort", self)
+			self.timerSort = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Sort", self)
+			self.nThrottleTimer = self.nThrottleTimer-1
+			self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottelTimer or 0
 		end
 	end	
 
