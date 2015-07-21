@@ -4,6 +4,21 @@ local GB = Apollo.GetAddon("GuildBank")
 
 
 	--[[ (local) Sorting functions --]]
+
+
+local function SlotSortOrderComparator_Category_SkillAMPs(tSlotA, tSlotB)	
+	local classA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]
+	local classB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]	
+	if classA ~= classB then
+		return classA < classB
+	end
+	
+	-- Inconclusive, carry on with general last-ditch sorting
+	return nil
+end
+local tCategoryComparators = {
+	[130] = SlotSortOrderComparator_Category_SkillAMPs
+}
 	
 local function SlotSortOrderComparator(tSlotA, tSlotB)
 	-- If either (or both) input slots are nil, non-nil slot "wins" - tSlotA wins if both are nil
@@ -24,6 +39,37 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 	if itemA:GetItemCategory() ~= itemB:GetItemCategory() then
 		return itemA:GetItemCategory() < itemB:GetItemCategory()
 	end
+	
+	-- Category specific sorters
+	if tCategoryComparators[itemA:GetItemCategory()] ~= nil then 		
+		local fComparator = tCategoryComparators[itemA:GetItemCategory()]
+		local result = fComparator(tSlotA, tSlotB)
+		if result ~= nil then 
+			return result 
+		end
+		
+	end
+	
+	-- Level requirements
+	if itemA:GetDetailedInfo().tPrimary.tLevelRequirement ~= nil or itemB:GetDetailedInfo().tPrimary.tLevelRequirement ~= nil then
+		Print("by level")
+		if itemA:GetDetailedInfo().tPrimary.tLevelRequirement == nil then
+			-- ItemA has no level requirements (but B does), so sort A before B
+			return true
+		end
+		
+		if itemB:GetDetailedInfo().tPrimary.tLevelRequirement == nil then
+			-- ItemB has no level requirements (but A does), so sort B before A
+			return false			
+		end
+		
+		-- Both have level requirements. Only sort by this if they're different.
+		if itemA:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired ~= itemB:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired then
+			return itemA:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired < itemB:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired
+		end
+	end
+	
+	--TODO: item level
 
 	-- Item name
 	if itemA:GetName() ~= itemB:GetName() then
@@ -40,12 +86,9 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 	-- TODO: Add category-id --> function map
 	
 	-- Default match (if no other rules apply) is to sort by current index
-	--return tSlotA.nIndex < tSlotB.nIndex
+	local result = tSlotA.nIndex < tSlotB.nIndex
+	--local result = itemA:GetInventoryId() < itemB:GetInventoryId()
 	
-	local result = itemA:GetInventoryId() < itemB:GetInventoryId()
-	--if string.find(itemA:GetName(), "Chunk") and string.find(itemB:GetName(), "Chunk") then
-	--Print(string.format("Comparing %s to %s using default comparison: %s", itemA:GetName(), itemB:GetName(), tostring(result)))
-	--end
 	return result
 end
 
@@ -62,8 +105,6 @@ local function CompareNils(a, b)
 	end
 end
 
-local function SlotSortOrderComparator_Category_AMPs(tSlotA, tSlotB)
-end
 
 
 local function DistributeBlanksSingle(tEntries, nBankSlots)
