@@ -1,5 +1,6 @@
 
 local GuildBankTools = Apollo.GetAddon("GuildBankTools")
+local GB = Apollo.GetAddon("GuildBank")
 
 
 	--[[ (local) Sorting functions --]]
@@ -26,7 +27,7 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 
 	-- Item name
 	if itemA:GetName() ~= itemB:GetName() then
-		return itemA:GetName() > itemB:GetName()
+		return itemA:GetName() < itemB:GetName()
 	end
 	
 	
@@ -147,7 +148,7 @@ end
 
 function GuildBankTools:Sort()
 	-- Set flag indicating that sort is in progress (to retrigger another sort after this one)
-	self.bIsSorting = true
+	self:StartOperation(self.enumOperations.Sort)
 	
 	-- All current bank slots, prior to sort operation
 	local tCurrentSlots = self.guildOwner:GetBankTab(self.nCurrentTab)
@@ -170,16 +171,16 @@ function GuildBankTools:Sort()
 				-- Expected events to process before triggering next move depends on swap or move.
 				if bIsSwap == true then
 					-- Swap fires bRemoved=true|false events for both slots
-					self.pendingSortEvents = {
+					self:SetPendingEvents(self.enumOperations.Sort, {
 						[tSortedTargetSlot.nIndex] = {true, false}, 
 						[tSourceSlot.nIndex] = {true, false}
-					}
+					})
 				else				
 					-- Move fires bRemoved=true for source, bRemoved=false for target
-					self.pendingSortEvents = {
+					self:SetPendingEvents(self.enumOperations.Sort, {
 						[tSortedTargetSlot.nIndex] = {false}, 
 						[tSourceSlot.nIndex] = {true}
-					}
+					})
 				end
 				
 				--Print(string.format("Moving [nTargetIdx=%d]:(ItemId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetItemId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
@@ -196,7 +197,7 @@ function GuildBankTools:Sort()
 	end
 	
 	-- Nothing moved in for-loop, guess we're all done sorting	
-	self.bIsSorting = false
+	self:StopOperation(self.enumOperations.Sort)
 end
 
 function GuildBankTools:UpdateSortButton()

@@ -14,9 +14,15 @@ local GuildBankTools = {}
 local GB
 
 -- Opacity levels to use when highlighting items
-local enumOpacity = {
+GuildBankTools.enumOpacity = {
 	Hidden = 0.2,
 	Visible = 1
+}
+
+-- Asynchronous event-driven operation types
+GuildBankTools.enumOperations = {
+	Stack = "Stack",
+	Sort = "Sort"
 }
 
 function GuildBankTools:new(o)
@@ -33,8 +39,18 @@ function GuildBankTools:Init()
 		return
 	end
 
+	-- Ensure tSettings table always exist, even if there are no saved settings
 	self.tSettings = self.tSettings or {}
+	
+	-- Default value for throttle, used when async event-operations such as stack/sort needs to be taken down a notch in speed (due to busy bank)
 	self.nThrottleTimer = 0
+	
+	-- Initially, no operations are in progress. Explicitly register "false" for all.
+	self.tInProgress = {}
+	for e,_ in pairs(GuildBankTools.enumOperations) do
+		self.tInProgress[e] = false
+	end
+	
 	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
 end
 
@@ -49,7 +65,6 @@ function GuildBankTools:OnLoad()
 	-- Register for bank-tab updated events
 	Apollo.RegisterEventHandler("GuildBankTab", "OnGuildBankTab", self) -- Guild bank tab opened/changed.
 	Apollo.RegisterEventHandler("GuildBankItem", "OnGuildBankItem", self) -- Guild bank tab contents changed.
---	Apollo.RegisterEventHandler("GuildResult", "OnGuildResult", self) -- Guild alerts/events, such as "guild bank busy" when spamming changes
 
 	-- Load form for later use
 	self.xmlDoc = XmlDoc.CreateFromFile("GuildBankTools.xml")
@@ -58,11 +73,12 @@ function GuildBankTools:OnLoad()
 	self.Orig_GB_OnBankTabUncheck = GB.OnBankTabUncheck
 	GB.OnBankTabUncheck = self.Hook_GB_OnBankTabUncheck	
 	
-	-- Hook into GuildAlerts to suppress the "guild bank busy" log message
+	-- Hook into GuildAlerts to suppress the "guild bank busy" log message / throttle speed when it occurs
 	local GA = Apollo.GetAddon("GuildAlerts")
-	self.Orig_GA_OnGuildResult = GB.OnGuildResult
+	self.Orig_GA_OnGuildResult = GA.OnGuildResult
 	GA.OnGuildResult = self.Hook_GA_OnGuildResult	
 	
+	-- Register with addon "OneVersion"
 	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
 end
 
@@ -85,20 +101,19 @@ function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)
 end
 
 function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResult)	
-	local GBT = Apollo.GetAddon("GuildBankTools")
+	-- NB: In this hooked context "self" is GuildAlerts, not GuildBankTools, so grab a ref to GuildBankTools
+	local GBT = Apollo.GetAddon("GuildBankTools")	
 	
 	if eResult ~= GuildLib.GuildResult_Busy then
-		-- Not the busy-signal, just let GuildAlerts handle it as usual
-		GBT.Orig_GB_OnBankTabUncheck(guildSender, strName, nRank, eResult)		
+		-- Not the busy-signal, just let GuildAlerts handle whatever it is as usual
+		GBT.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
 	else
-		-- Bank complains that we're spamming, slow down a bit
-		Print("Guild bank busy, slowing down a bit...")
+		-- Bank complains that it's busy (due to sort/stack spam)
+		-- "Eat" the busy signal event, and just slow down a bit
+		
+		--Print("Guild bank busy, slowing down a bit...")
 		GBT.nThrottleTimer = 1
-		if GBT.bIsStacking then
-			GBT.timerStack = ApolloTimer.Create(GBT.nThrottleTimer, false, "Stack", GBT)
-		elseif GBT.bIsSorting then
-			GBT.timerSort = ApolloTimer.Create(GBT.nThrottleTimer, false, "Sort", GBT)
-		end
+		GBT.timerStack = ApolloTimer.Create(GBT.nThrottleTimer, false, GBT.enumOperations[GBT:GetInProgressOperation()], GBT)
 	end
 end
 
@@ -132,7 +147,8 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	self.guildOwner = guildOwner
 	
 	-- Changed tab, interrupt any in-progress stacking
-	self.bIsStacking = false
+	self:StopAllOperations()
+	
 	
 	-- Calculate list of stackable items
 	self:IdentifyStackableItems()
@@ -144,6 +160,7 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	-- Then highlight any search criteria matches
 	self:HighlightSearchMatches()
 end
+
 
 -- React to bank changes by re-calculating stackability
 -- If stacking is in progress, mark progress on the current stacking (pendingStackEvents)
@@ -163,402 +180,95 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)	
 	self:UpdateSortButton()
 	
-	-- If stacking is in progress - and last pending update was just completed - continue stacking
-	if self.bIsStacking == true then
-		self:RemovePendingGuildBankEvent(self.pendingStackEvents, nInventorySlot, bRemoved)
-
-		if self:HasPendingGuildBankEvents(self.pendingStackEvents) == false then
-			self.timerStack = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Stack", self)
-			self.nThrottleTimer = self.nThrottleTimer-1
-			self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottelTimer or 0
-		end
-	end	
+	-- Is any operation in progress?
+	local eOperationInProgress = self:GetInProgressOperation()
+	
+	if eOperationInProgress ~= nil then
+		-- Remove pending event from list of expected events for in-progress operation
+		self:RemovePendingGuildBankEvent(eOperationInProgress, nInventorySlot, bRemoved)
 		
-	-- If sorting is in progress - and last pending update was just completed - continue stacking
-	if self.bIsSorting == true then
-		self:RemovePendingGuildBankEvent(self.pendingSortEvents, nInventorySlot, bRemoved)
-		
-		if self:HasPendingGuildBankEvents(self.pendingSortEvents) == false then
-			self.timerSort = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Sort", self)
-			self.nThrottleTimer = self.nThrottleTimer-1
-			self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottelTimer or 0
+		-- All events handled? If so, fire off next pass of sort/stack
+		if self:HasPendingGuildBankEvents(eOperationInProgress) == false then		
+			self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, GuildBankTools.enumOperations[eOperationInProgress], self)
+			self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottleTimer-1 or 0
 		end
-	end	
-
+	end
+	
 	-- Once all real processing is done, update the filtering if needed
 	self:HighlightSearchMatches()	
 end
 
-function GuildBankTools:RemovePendingGuildBankEvent(tPendingEvents, nUpdatedInventorySlot, bRemoved)
-	if tPendingEvents ~= nil and type(tPendingEvents[nUpdatedInventorySlot]) == "table" then
-		local tPending = tPendingEvents[nUpdatedInventorySlot]
+
+--[[ Control of in-progress operations --]]
+
+function GuildBankTools:StopOperation(eOperation)
+	self.tInProgress[eOperation] = false
+end
+
+function GuildBankTools:StartOperation(eOperation)
+	self.tInProgress[eOperation] = true
+end
+
+
+function GuildBankTools:StopAllOperations()
+	-- Set kill-flag for all operations
+	for eOperation, bInProgress in pairs(self.tInProgress) do
+		self:StopOperation(eOperation)
+	end
+end
+
+function GuildBankTools:IsOperationInProgress(eOperation)
+	return self.tInProgress[eOperation]
+end
+
+function GuildBankTools:GetInProgressOperation()
+	for eOperation, bInProgress in pairs(self.tInProgress) do
+		if bInProgress == true then
+			return eOperation
+		end
+	end
+end
+
+
+--[[ Control of pending events for asynchronous operation --]]
+
+function GuildBankTools:SetPendingEvents(eOperation, tPendingEvents)	
+	self.tPendingEvents = self.tPendingEvents or {}
+	self.tPendingEvents[eOperation] = tPendingEvents
+end
+
+function GuildBankTools:RemovePendingGuildBankEvent(eOperation, nUpdatedInventorySlot, bRemoved)
+	self.tPendingEvents = self.tPendingEvents or {}
+	self.tPendingEvents[eOperation] = self.tPendingEvents[eOperation] or {}
+	
+	local tPendingForOperation = self.tPendingEvents[eOperation]
+	
+	if tPendingForOperation ~= nil and type(tPendingForOperation[nUpdatedInventorySlot]) == "table" then
+		local tPending = tPendingForOperation[nUpdatedInventorySlot]
 		for i,b in ipairs(tPending) do
 			if b == bRemoved then				
 				table.remove(tPending, i)
 			end
 			
 			if #tPending == 0 then
-				tPendingEvents[nUpdatedInventorySlot] = nil
+				tPendingForOperation[nUpdatedInventorySlot] = nil
 			end
 		end
 	end
 end
 
-function GuildBankTools:HasPendingGuildBankEvents(tPendingEvents)
-	if tPendingEvents == nil then
-		return false
+function GuildBankTools:HasPendingGuildBankEvents(eOperation)
+	if self.tPendingEvents == nil or self.tPendingEvents[eOperation] == nil then return
+		false
 	end
 	
-	for k,v in pairs(tPendingEvents) do
+	for k,v in pairs(self.tPendingEvents[eOperation]) do
 		return true
 	end
+	
 	return false
 end
 
--- Scans current guild bank tab, returns list containing list of stackable slots
-function GuildBankTools:IdentifyStackableItems()
-	-- Identify all stackable slots in the current tab, and add to tStackableItems
-	-- This includes stackables with just 1 stack (ie. nothing to stack with)
-	-- tStackableItems is a table with key=itemId, value=list of slots containing this itemId
-	local tStackableItems = {}
-	for _,tSlot in ipairs(self.guildOwner:GetBankTab(self.nCurrentTab)) do
-		if tSlot ~= nil and self:IsItemStackable(tSlot.itemInSlot) then
-			local nItemId = tSlot.itemInSlot:GetItemId()
-			
-			-- Add current tSlot to tSlots-list containing all slots for this itemId
-			local tSlots = tStackableItems[nItemId] or {}
-			tSlots[#tSlots+1] = tSlot
-			
-			-- Add slot details to list of stackable items
-			tStackableItems[nItemId] = tSlots
-		end
-	end
-	
-	-- Go through tStackableItems and build new list containing only itemIds with >1 stackable slots.
-	local tStackable = {}	
-	for itemId,tSlots in pairs(tStackableItems) do
-		-- More than one stackable stack of this stackable item? If so, add to tStackable. Stack!
-		if #tSlots > 1 then 		
-			tStackable[#tStackable+1] = tSlots
-		end
-	end
-
-	-- Store in addon scope
-	self.tStackable = tStackable
-	
-	-- Update Stack button enable-status
-	self:UpdateStackButton()
-end
-
-function GuildBankTools:UpdateStackButton()
-	-- Do nothing if overlay form is not loaded
-	if self.wndOverlayForm == nil then
-		return
-	end
-	
-	local bEnable = self.tStackable ~= nil and #self.tStackable > 0
-	local wndButton = self.wndOverlayForm:FindChild("StackButton")
-	if wndButton ~= nil then
-		wndButton:Enable(bEnable)	
-	end
-end
-
--- An item is considered stackable if it has a current stacksize < max stacksize.
--- TODO: Manually handle BoE bags and other stackable items with a non-visible max stack size.
-function GuildBankTools:IsItemStackable(tItem)	
-	return tItem:GetMaxStackCount() > 1 and tItem:GetStackCount() < tItem:GetMaxStackCount()
-end
-
--- Performs one single stacking operation.
--- Sets a flag indicating if further stacking is possible, but takes no further action 
--- (awaits Event indicating this stacking-operation has fully completed)
-function GuildBankTools:Stack()
-	-- Set flag for retriggering another stack after this one	
-	self.bIsStacking = true
-	
-	-- Safeguard, but should only happen if someone calls :Stack() before opening the guild bank
-	if self.tStackable == nil then
-		self.bIsStacking = false
-		return
-	end
-	
-	-- Grab last element from the tStackable list of item-types
-	local tSlots = table.remove(self.tStackable)
-	
-	-- Nothing in self.tStackable? Just do nothing then.
-	if tSlots == nil then
-		self.bIsStacking = false
-		return
-	end
-
-	-- Identify source (smallest) and target (largest) stacks
-	local tSourceSlot, tTargetSlot
-	for _, tSlot in pairs(tSlots) do		
-		if (tSourceSlot == nil) or -- Accept first hit as source
-			(tSlot.itemInSlot:GetStackCount() < tSourceSlot.itemInSlot:GetStackCount() or -- Current slot has fewer items
-			(tSlot.itemInSlot:GetStackCount() == tSourceSlot.itemInSlot:GetStackCount()) and tSlot.nIndex > tSourceSlot.nIndex) then -- Current slot has same number of items, but is at a higher index			
-			tSourceSlot = tSlot
-		end
-
-		if (tTargetSlot == nil) or -- Accept first hit as target
-			(tSlot.itemInSlot:GetStackCount() > tTargetSlot.itemInSlot:GetStackCount() or -- Current slot has more items
-			(tSlot.itemInSlot:GetStackCount() == tTargetSlot.itemInSlot:GetStackCount()) and tSlot.nIndex < tTargetSlot.nIndex) then -- Current slot has same number of items, but is at a lower index
-			tTargetSlot = tSlot
-		end		
-	end
-	
-	-- Determine current stack move size
-	local nRoomInTargetSlot = tSourceSlot.itemInSlot:GetMaxStackCount() - tTargetSlot.itemInSlot:GetStackCount()
-	local nItemsToMove = math.min(nRoomInTargetSlot, tSourceSlot.itemInSlot.GetStackCount())			
-	
-	-- Make a note of slot-indices that are being updated. We need to await events for both slots before triggering next stack pass.	
-	local bPartialMove = nItemsToMove < tSourceSlot.itemInSlot.GetStackCount()
-	if bPartialMove then
-		-- Partial move (only part of source stack is moved into target) updates target and updates source
-		self.pendingStackEvents = {
-			[tTargetSlot.nIndex] = {false}, 
-			[tSourceSlot.nIndex] = {false}
-		}
-	else
-		-- Full move (entire source stack is moved into target) updates target and removes source
-		self.pendingStackEvents = {
-			[tTargetSlot.nIndex] = {false}, 
-			[tSourceSlot.nIndex] = {true}
-		}
-	end
-	
-	-- Fire off the update by beginning and ending the bank transfer from source to target.
-	self.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, nItemsToMove)
-	
-	-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
-	self.guildOwner:EndBankItemTransfer(self.nCurrentTab, tTargetSlot.nIndex) 
-end
-
--- When the stack-button is clicked, just execute the stack operation
-function GuildBankTools:OnStackButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
-	self:Stack()
-end
-
--- When mousing over the button, change bank-slot opacity to identify stackables
-function GuildBankTools:OnStackButton_MouseEnter(wndHandler, wndControl, x, y)
-	if wndControl:IsEnabled() then
-		self:HighlightStackables()
-	end
-end
-
--- When no longer hovering over the button, reset opacity for stackables to whatever matches search criteria
-function GuildBankTools:On_StackButton_MouseExit(wndHandler, wndControl, x, y)
-	self:HighlightSearchMatches()
-end
-
--- Highlight all items-to-stack on the current tab
-function GuildBankTools:HighlightStackables()
-	-- Build lookuptable of all stackable indices. Key=bank slot index, Value=true (value not used).
-	local tStackableSlotIdx = {}
-	for _,tStackableItem in ipairs(self.tStackable) do
-		for _,tSlot in ipairs(tStackableItem) do
-			tStackableSlotIdx[tSlot.nIndex] = true
-		end		
-	end
-		
-	-- Go through all bank wnd-slots, and set visibility according to tStackableSlotIdx list
-	if GB ~= nil then
-		for i,wndSlot in ipairs(GB.tWndRefs.tBankItemSlots) do
-			if tStackableSlotIdx[i] ~= nil then
-				wndSlot:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Visible)
-			else
-				wndSlot:FindChild("BankItemIcon"):SetOpacity(enumOpacity.Hidden)
-			end			
-		end
-	end	
-end
-
--- Go through all bank slots with items, highlight all those with matching name
-function GuildBankTools:HighlightSearchMatches()
-	-- Extract search string
-	local strSearch = self.wndOverlayForm:FindChild("SearchEditBox"):GetText()
-	local bPerformSearch = false
-	if strSearch ~= nil and strSearch ~= "" then
-		strSearch = strSearch:lower()
-		bPerformSearch = true
-	end
-	
-	-- Get usable-only marker
-	local bPerformUsableCheck = self.wndOverlayForm:FindChild("UsableButton"):IsChecked()
-
-	if GB ~= nil then
-		-- Check all tabs for search-hits
-		for nTab,wndHighlight in ipairs(self.tTabHighlights) do
-			-- Indicates if this tab has any search matches
-			local bSearchMatchesOnTab = false
-			
-			local tTab = self.guildOwner:GetBankTab(nTab)
-			if tTab ~= nil then
-				for _,tSlot in ipairs(tTab) do				
-					if tSlot ~= nil and tSlot.itemInSlot ~= nil then
-						-- Default: all checks pass
-						local bSearchOK, bUsableOK = true, true
-
-						-- Check match against search string
-						if bPerformSearch then
-							-- Search criteria present, only show matches
-							if string.match(tSlot.itemInSlot:GetName():lower(), strSearch) ~= nil then
-								-- Match, keep visible
-								bSearchOK = true							
-							else
-								-- No match, hide
-								bSearchOK = false
-							end
-						end
-						
-						-- Check usability
-						if bPerformUsableCheck then
-							bUsableOK = self:IsUsable(tSlot.itemInSlot)				
-						end
-
-						
-						if nTab == self.nCurrentTab then
-							-- For current tab, show/hide individual items
-							local bShow = bSearchOK and bUsableOK
-							GB.tWndRefs.tBankItemSlots[tSlot.nIndex]:FindChild("BankItemIcon"):SetOpacity(bShow and enumOpacity.Visible or enumOpacity.Hidden)
-						else
-							-- For other tabs, just mark tab header for highlighting
-							if bPerformSearch and bSearchOK then -- Only highlight if search text is entered/matched								
-								if bPerformUsableCheck then
-									if bUsableOK then
-										-- Usable checked , and usable search-hit found on tab, set indicator
-										bSearchMatchesOnTab = true
-									end							
-								else
-									-- Search-hit on tab, usable-only not checked
-									bSearchMatchesOnTab = true
-								end
-							end
-						end						
-					end
-				end
-			end
-						
-			-- Show or hide tab-match indicator based on search matches
-			wndHighlight:Show(bSearchMatchesOnTab)
-		end
-	end	
-end
-
-function GuildBankTools:IsUsable(itemInSlot)	
-	if itemInSlot == nil then 
-		return true 
-	end
-	
-	local tDetails = itemInSlot:GetDetailedInfo()
-	if tDetails == nil then
-		return true
-	end
-	
-	-- Item has level requirements?
-	if type(tDetails.tPrimary.tLevelRequirement) == "table" and not tDetails.tPrimary.tLevelRequirement.bRequirementMet then
-		return false
-	end
-	
-	-- Dyes and AMPs only have a "strFailure" spell property when they're already known
-	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.arSpells) == "table" and #tDetails.tPrimary.arSpells == 1 and tDetails.tPrimary.arSpells[1].strFailure ~= nil then
-		return false
-	end
-	
-	-- Check item class requirement
-	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.arClassRequirement) == "table" and not tDetails.tPrimary.arClassRequirement.bRequirementMet then
-		return false
-	end
-	
-	-- Weapon profficiency requirement
-	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.tProfRequirement) == "table" and not tDetails.tPrimary.tProfRequirement.bRequirementMet then
-		return false
-	end
-	
-	-- Schematics must be learnable and unknown
-	-- Item family 19 = schematic. Can't find the darn enum anywhere :(. So here's some examples:
-	--[[
-		Dye
-		category 54 = "Dyes"
-		type 332 = "Dye"
-		family 16 = "Consumable"
-
-		Weaponsmith Schematic
-		category 66 = ""
-		type 257 = "Weaponsmith Schematic"
-		family 19 = "Schematic"
-
-		Outfitter Guide
-		category 66 = ""
-		type 255 = "Outfitter Guide"
-		family 19 = "Schematic"
-	--]]
-	if itemInSlot:GetItemFamily() == 19 then
-		-- No tradeskill requirements means this tradeskill is not known by player
-		if tDetails.tPrimary ~= nil and tDetails.tPrimary.arTradeskillReqs == nil then
-			return false
-		elseif tDetails.tPrimary ~= nil and #tDetails.tPrimary.arTradeskillReqs == 1 and (tDetails.tPrimary.arTradeskillReqs[1].bCanLearn == false or tDetails.tPrimary.arTradeskillReqs[1].bIsKnown == true) then
-			-- Tradeskill requirements present (=known tradeskill) but item is known or unlearnable
-			return false
-		end
-	end
-	
-	-- Catalysts (NB: Some catalysts lack the tCatalyst info structure and will not be hidden accordingly)
-	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.tCatalyst) == "table" then
-		local bKnown = false
-		for _,skill in ipairs(CraftingLib.GetKnownTradeskills()) do
-			if skill.eId == tDetails.tPrimary.tCatalyst.eTradeskill then
-				bKnown = true
-			end
-		end
-		
-		if not bKnown then
-			return false
-		end
-	end
-	
-	-- Pets only have a arSpecialFailures property when they're already known
-	if tDetails.tPrimary ~= nil and tDetails.tPrimary.arSpecialFailures ~= nil then
-		return false
-	end	
-
-	-- Nothing borked up the match yet, item must be usable
-	return true
-end
-
---[[ React to changes to the search editbox --]]
-function GuildBankTools:OnSearchEditBox_EditBoxChanged(wndHandler, wndControl, strText)
-	-- Content changed, highlight matches
-	self:HighlightSearchMatches()
-	
-	local strSearch = self.wndOverlayForm:FindChild("SearchEditBox"):GetText()
-	if strSearch ~= nil and strSearch ~= "" then
-		self.wndOverlayForm:FindChild("ClearSearchButton"):Show(true)
-	else
-		self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
-	end
-end
-
-function GuildBankTools:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
-	-- Clicking the clear-button drops focus, clears text and hides the button
-	self.wndOverlayForm:FindChild("SearchEditBox"):SetText("")
-	self.wndOverlayForm:FindChild("SearchEditBox"):ClearFocus()
-	self.wndOverlayForm:FindChild("ClearSearchButton"):Show(false)
-	
-	self:HighlightSearchMatches()
-end
-
-
-
---[[ React to the usable-checkbox --]]
-function GuildBankTools:OnUsableButton_ButtonCheck(wndHandler, wndControl, eMouseButton)
-	self.tSettings.bUsableOnly = true
-	self:HighlightSearchMatches()
-end
-function GuildBankTools:OnUsableButton_ButtonUncheck(wndHandler, wndControl, eMouseButton)
-	self.tSettings.bUsableOnly = false
-	self:HighlightSearchMatches()	
-end
 
 
 --[[ Settings save/restore --]]
