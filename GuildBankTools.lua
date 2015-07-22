@@ -20,10 +20,11 @@ GuildBankTools.enumOpacity = {
 }
 
 -- Asynchronous event-driven operation types
+-- Key = Operation name
 GuildBankTools.enumOperations = {
 	Stack = "Stack",
 	Sort = "Sort"
-}
+}	
 
 function GuildBankTools:new(o)
 	o = o or {}
@@ -109,11 +110,18 @@ function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResu
 		GBT.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
 	else
 		-- Bank complains that it's busy (due to sort/stack spam)
-		-- "Eat" the busy signal event, and just slow down a bit
-		
-		--Print("Guild bank busy, slowing down a bit...")
-		GBT.nThrottleTimer = 1
-		GBT.timerStack = ApolloTimer.Create(GBT.nThrottleTimer, false, GBT.enumOperations[GBT:GetInProgressOperation()], GBT)
+		-- Is it me spamming? (is there an in-progress operation?)
+		local eOperationInProgress = GBT:GetInProgressOperation()
+	
+		if eOperationInProgress ~= nil then
+			-- Yep, GuildBankTools is spamming
+			-- "Eat" the busy signal event, engage throttle, and continue the operation
+			GBT.nThrottleTimer = 1
+			GBT:ExecuteThrottledOperation(eOperationInProgress)		
+		else
+			-- Something else did this, pass the signal on to GuildAlerts
+			GBT.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
+		end
 	end
 end
 
@@ -154,8 +162,8 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	self:IdentifyStackableItems()
 		
 	-- Calculate sorted list of items
-	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)
-	self:UpdateSortButton()
+	self.GBT_Sort:CalculateSortedList(guildOwner, nTab)
+	self.GBT_Sort:UpdateSortButton()
 	
 	-- Then highlight any search criteria matches
 	self:HighlightSearchMatches()
@@ -177,8 +185,8 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	self:IdentifyStackableItems()
 	
 	-- Re-calculate sorted list of items
-	self.tSortedSlots = self:CalculateSortedList(guildOwner, nTab)	
-	self:UpdateSortButton()
+	self.GBT_Sort:CalculateSortedList(guildOwner, nTab)	
+	self.GBT_Sort:UpdateSortButton()
 	
 	-- Is any operation in progress?
 	local eOperationInProgress = self:GetInProgressOperation()
@@ -188,9 +196,8 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 		self:RemovePendingGuildBankEvent(eOperationInProgress, nInventorySlot, bRemoved)
 		
 		-- All events handled? If so, fire off next pass of sort/stack
-		if self:HasPendingGuildBankEvents(eOperationInProgress) == false then		
-			self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, GuildBankTools.enumOperations[eOperationInProgress], self)
-			self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottleTimer-1 or 0
+		if self:HasPendingGuildBankEvents(eOperationInProgress) == false then
+			self:ExecuteThrottledOperation(eOperationInProgress)
 		end
 	end
 	
@@ -202,12 +209,30 @@ end
 --[[ Control of in-progress operations --]]
 
 function GuildBankTools:StopOperation(eOperation)
-	self.tInProgress[eOperation] = false
+	self.tInProgress[eOperation] = nil
 end
 
-function GuildBankTools:StartOperation(eOperation)
-	self.tInProgress[eOperation] = true
+-- Doesn't actually start anything, but registers something as started.
+-- 2nd and 3rd parameters are object.function for repeated calls once all "must wait for" events have been received
+function GuildBankTools:StartOperation(eOperation, tObject, strOperation)
+	self.tInProgress[eOperation] = {tObject = tObject, strOperation = strOperation}
 end
+
+function GuildBankTools:ExecuteThrottledOperation(eOperation)
+	-- Start timer
+	self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, self.tInProgress[eOperation].strOperation, self.tInProgress[eOperation].tObject)
+	
+	-- Decrease throttled delay by 0.25 sec for next pass
+	self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottleTimer-0.25 or 0
+end
+
+
+--[[ Delegate methods for async operations --]]
+
+function GuildBankTools:Sort()
+	self.GBT_Sort:Sort()
+end
+
 
 
 function GuildBankTools:StopAllOperations()
@@ -222,10 +247,10 @@ function GuildBankTools:IsOperationInProgress(eOperation)
 end
 
 function GuildBankTools:GetInProgressOperation()
-	for eOperation, bInProgress in pairs(self.tInProgress) do
-		if bInProgress == true then
-			return eOperation
-		end
+	-- Just return first-hit operation, stopping an operation removes it from the list,
+	-- so the assumption is that self.tInProgress is {} or has exactly 1 k/v pair.
+	for eOperation, fOperation in pairs(self.tInProgress) do
+		return eOperation
 	end
 end
 
@@ -269,6 +294,10 @@ function GuildBankTools:HasPendingGuildBankEvents(eOperation)
 	return false
 end
 
+
+function GuildBankTools:GetCurrentTabSlots()
+	return self.guildOwner:GetBankTab(self.nCurrentTab)
+end
 
 
 --[[ Settings save/restore --]]

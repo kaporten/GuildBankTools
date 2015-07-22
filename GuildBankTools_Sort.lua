@@ -6,7 +6,10 @@ local GB = Apollo.GetAddon("GuildBank")
 	--[[ (local) Sorting functions --]]
 
 
-local function SlotSortOrderComparator_Category_SkillAMPs(tSlotA, tSlotB)	
+local Sort = {}
+GuildBankTools.GBT_Sort = Sort
+	
+function Sort.SlotSortOrderComparator_Category_SkillAMPs(tSlotA, tSlotB)	
 	local classA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]
 	local classB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]	
 	if classA ~= classB then
@@ -16,19 +19,21 @@ local function SlotSortOrderComparator_Category_SkillAMPs(tSlotA, tSlotB)
 	-- Inconclusive, carry on with general last-ditch sorting
 	return nil
 end
-local tCategoryComparators = {
-	[130] = SlotSortOrderComparator_Category_SkillAMPs
+
+Sort.tCategoryComparators = {
+	[130] = Sort.SlotSortOrderComparator_Category_SkillAMPs
 }
 	
-local function SlotSortOrderComparator(tSlotA, tSlotB)
+function Sort.SlotSortOrderComparator(tSlotA, tSlotB)
 	-- If either (or both) input slots are nil, non-nil slot "wins" - tSlotA wins if both are nil
-	if tSlotA == nil or tSlotB == nil then return CompareNils(tSlotA, tSlotB) end
+	if tSlotA == nil or tSlotB == nil then return Sort:CompareNils(tSlotA, tSlotB) end
 
 	-- Shorthand variables to items in slots
 	local itemA, itemB = tSlotA.itemInSlot, tSlotB.itemInSlot
 
 	-- Same nil check on items as for slots
-	if itemA == nil or itemB == nil then return CompareNils(itemA, itemB) end
+	if itemA == nil or itemB == nil then return Sort:CompareNils(itemA, itemB) end
+	
 	
 	-- Family (Crafting, Schematic etc)
 	if itemA:GetItemFamily() ~= itemB:GetItemFamily() then
@@ -41,8 +46,8 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 	end
 	
 	-- Category specific sorters
-	if tCategoryComparators[itemA:GetItemCategory()] ~= nil then 		
-		local fComparator = tCategoryComparators[itemA:GetItemCategory()]
+	if Sort.tCategoryComparators[itemA:GetItemCategory()] ~= nil then 		
+		local fComparator = Sort.tCategoryComparators[itemA:GetItemCategory()]
 		local result = fComparator(tSlotA, tSlotB)
 		if result ~= nil then 
 			return result 
@@ -52,7 +57,6 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 	
 	-- Level requirements
 	if itemA:GetDetailedInfo().tPrimary.tLevelRequirement ~= nil or itemB:GetDetailedInfo().tPrimary.tLevelRequirement ~= nil then
-		Print("by level")
 		if itemA:GetDetailedInfo().tPrimary.tLevelRequirement == nil then
 			-- ItemA has no level requirements (but B does), so sort A before B
 			return true
@@ -72,10 +76,17 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 	--TODO: item level
 
 	-- Item name
-	if itemA:GetName() ~= itemB:GetName() then
-		return itemA:GetName() < itemB:GetName()
+	--[[
+	if Sort.bReverse then
+		if itemA:GetName() > itemB:GetName() then
+			return itemA:GetName() < itemB:GetName()
+		end
+	else
+		if itemA:GetName() ~= itemB:GetName() then
+			return itemA:GetName() < itemB:GetName()
+		end
 	end
-	
+	--]]
 	
 	-- Same family and category of item. Apply category-specific rules
 	-- TODO: pseudo code below
@@ -92,7 +103,7 @@ local function SlotSortOrderComparator(tSlotA, tSlotB)
 	return result
 end
 
-local function CompareNils(a, b)
+function Sort:CompareNils(a, b)
 	Print("Comparing nils")
 	if a == nil and b == nil then
 		return false
@@ -107,7 +118,7 @@ end
 
 
 
-local function DistributeBlanksSingle(tEntries, nBankSlots)
+function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 	-- How many blank slots are there?
 	local nBlanks = nBankSlots-#tEntries
 
@@ -155,22 +166,25 @@ local function DistributeBlanksSingle(tEntries, nBankSlots)
 	end
 end
 
-function GuildBankTools:CalculateSortedList(guildOwner, nTab)
+function Sort:CalculateSortedList(guildOwner, nTab)
 	local tTabContent = guildOwner:GetBankTab(nTab)
-	table.sort(tTabContent, SlotSortOrderComparator)
+	table.sort(tTabContent, Sort.SlotSortOrderComparator)
 	
-	DistributeBlanksSingle(tTabContent, guildOwner:GetBankTabSlots())
+	Sort:DistributeBlanksSingle(tTabContent, guildOwner:GetBankTabSlots())
 	
 	-- Realign indices on all slots with new actual index
 	for newIndex,entry in ipairs(tTabContent) do
 		entry.nIndex = newIndex
 	end
 
-	return tTabContent
+	-- Store result in self-variable
+	self.tSortedSlots = tTabContent
 end
 
 
-local function GetSlotByInventoryId(tCurrentSlots, nInventoryId)
+-- TODO: Move to general
+
+function Sort:GetSlotByInventoryId(tCurrentSlots, nInventoryId)
 	for idx, tSlot in ipairs(tCurrentSlots) do
 		if tSlot.itemInSlot:GetInventoryId() == nInventoryId then
 			return tSlot
@@ -178,21 +192,20 @@ local function GetSlotByInventoryId(tCurrentSlots, nInventoryId)
 	end
 end
 
-local function GetSlotByIndex(tCurrentSlots, nIndex)
+function Sort:GetSlotByIndex(tCurrentSlots, nIndex)
 	for idx, tSlot in ipairs(tCurrentSlots) do
 		if tSlot.nIndex == nIndex then
-			--Print("Slot fou
 			return tSlot
 		end
 	end
 end
 
-function GuildBankTools:Sort()
-	-- Set flag indicating that sort is in progress (to retrigger another sort after this one)
-	self:StartOperation(self.enumOperations.Sort)
+function Sort:Sort()
+	-- Start async event-driven process.
+	GuildBankTools:StartOperation(GuildBankTools.enumOperations.Sort, self, "Sort")
 	
 	-- All current bank slots, prior to sort operation
-	local tCurrentSlots = self.guildOwner:GetBankTab(self.nCurrentTab)
+	local tCurrentSlots = GuildBankTools.guildOwner:GetBankTab(GuildBankTools.nCurrentTab)
 	
 	-- Loop through sorted list of bank-slots, process first slot with incorrect InventoryId (first slot to move stuff into)
 	for _,tSortedTargetSlot in ipairs(self.tSortedSlots) do
@@ -201,24 +214,24 @@ function GuildBankTools:Sort()
 			-- Do nothing, just skip this blank slot
 		else
 			-- Find current source slot by scanning for slot which contains the desired inventory id
-			local tSourceSlot = GetSlotByInventoryId(tCurrentSlots, tSortedTargetSlot.itemInSlot:GetInventoryId())
+			local tSourceSlot = Sort:GetSlotByInventoryId(tCurrentSlots, tSortedTargetSlot.itemInSlot:GetInventoryId())
 
 			-- Is the current placement of this inventory id at the correct index?
 			if tSortedTargetSlot.nIndex ~= tSourceSlot.nIndex then
 					
 				-- About to sort a slot. Determine if it is a move (to empty target), or swap (to already occupied target).			
-				local bIsSwap = GetSlotByIndex(tCurrentSlots, tSortedTargetSlot.nIndex) ~= nil
+				local bIsSwap = Sort:GetSlotByIndex(tCurrentSlots, tSortedTargetSlot.nIndex) ~= nil
 
 				-- Expected events to process before triggering next move depends on swap or move.
 				if bIsSwap == true then
 					-- Swap fires bRemoved=true|false events for both slots
-					self:SetPendingEvents(self.enumOperations.Sort, {
+					GuildBankTools:SetPendingEvents(GuildBankTools.enumOperations.Sort, {
 						[tSortedTargetSlot.nIndex] = {true, false}, 
 						[tSourceSlot.nIndex] = {true, false}
 					})
 				else				
 					-- Move fires bRemoved=true for source, bRemoved=false for target
-					self:SetPendingEvents(self.enumOperations.Sort, {
+					GuildBankTools:SetPendingEvents(GuildBankTools.enumOperations.Sort, {
 						[tSortedTargetSlot.nIndex] = {false}, 
 						[tSourceSlot.nIndex] = {true}
 					})
@@ -227,10 +240,10 @@ function GuildBankTools:Sort()
 				--Print(string.format("Moving [nTargetIdx=%d]:(ItemId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetItemId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
 				
 				-- Fire off the update by beginning and ending the bank transfer from source to target.
-				self.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
+				GuildBankTools.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
 				
 				-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
-				self.guildOwner:EndBankItemTransfer(self.nCurrentTab, tSortedTargetSlot.nIndex) 
+				GuildBankTools.guildOwner:EndBankItemTransfer(GuildBankTools.nCurrentTab, tSortedTargetSlot.nIndex) 
 
 				return
 			end
@@ -238,24 +251,24 @@ function GuildBankTools:Sort()
 	end
 	
 	-- Nothing moved in for-loop, guess we're all done sorting	
-	self:StopOperation(self.enumOperations.Sort)
+	GuildBankTools:StopOperation(GuildBankTools.enumOperations.Sort)
 end
 
-function GuildBankTools:UpdateSortButton()
+function Sort:UpdateSortButton()
 	-- Do nothing if overlay form is not loaded
-	if self.wndOverlayForm == nil then
+	if GuildBankTools.wndOverlayForm == nil then
 		return
 	end
 		
 	local bEnable = not self:IsEverythingSorted()
-	local wndButton = self.wndOverlayForm:FindChild("SortButton")
+	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
 	if wndButton ~= nil then
 		wndButton:Enable(bEnable)	
 	end
 end
 
-function GuildBankTools:IsEverythingSorted()
-	local tCurrentSlots = self.guildOwner:GetBankTab(self.nCurrentTab)
+function Sort:IsEverythingSorted()
+	local tCurrentSlots = GuildBankTools:GetCurrentTabSlots()
 	
 	-- Build map of current slot idx -> inventoryId
 	local tCurrentInventoryIds = {}
@@ -277,16 +290,17 @@ function GuildBankTools:IsEverythingSorted()
 			end
 		end
 	end
-	
 	return true
 end
 
 
 	--[[ Button events --]]
 
+	-- TODO: Load/handle compartmentalized sort-form from this file
 function GuildBankTools:OnSortButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
---	Print("OnSortButton_ButtonSignal")
-	self:Sort()
+	Print("OnSortButton_ButtonSignal, btn=" .. eMouseButton)
+	--if eMouseButton
+	Sort:Sort()
 end
 
 function GuildBankTools:OnSortButton_MouseEnter(wndHandler, wndControl, x, y)
