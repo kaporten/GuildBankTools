@@ -299,6 +299,10 @@ function GuildBankTools:GetCurrentTabSlots()
 	return self.guildOwner:GetBankTab(self.nCurrentTab)
 end
 
+function GuildBankTools:GetCurrentTabSize()
+	return self.guildOwner:GetBankTabSlots()
+end
+
 
 --[[ Settings save/restore --]]
 -- Save addon config per character. Called by engine when performing a controlled game shutdown.

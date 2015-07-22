@@ -60,8 +60,8 @@ end
 -- Sets a flag indicating if further stacking is possible, but takes no further action 
 -- (awaits Event indicating this stacking-operation has fully completed)
 function GuildBankTools:Stack()
-	-- Set flag for retriggering another stack after this one	
-	self:StartOperation(self.enumOperations.Stack)
+	-- Start async event-driven process.
+	GuildBankTools:StartOperation(GuildBankTools.enumOperations.Stack, self, "Stack")
 	
 	-- Safeguard, but should only happen if someone calls :Stack() before opening the guild bank
 	if self.tStackable == nil then
