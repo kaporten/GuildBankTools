@@ -50,8 +50,8 @@ function Sort.Comparator_RequiredLevel(tSlotA, tSlotB)
 		-- ItemB has no level requirements (but A does), so sort B before A
 		if primaryB.tLevelRequirement == nil then return false end
 		
-		-- Both have level requirements. 
-		return Sort:CompareValues(primaryA.nLevelRequired, primaryB.nLevelRequired)		
+		-- Both have level requirements
+		return Sort:CompareValues(primaryA.tLevelRequirement.nLevelRequired, primaryB.tLevelRequirement.nLevelRequired)		
 	end
 end
 
