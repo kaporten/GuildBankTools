@@ -9,19 +9,91 @@ local GB = Apollo.GetAddon("GuildBank")
 local Sort = {}
 GuildBankTools.GBT_Sort = Sort
 	
-function Sort.SlotSortOrderComparator_Category_SkillAMPs(tSlotA, tSlotB)	
-	local classA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]
-	local classB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]	
-	if classA ~= classB then
-		return classA < classB
-	end
-	
-	-- Inconclusive, carry on with general last-ditch sorting
-	return nil
+
+
+function Sort.Comparator_Family(tSlotA, tSlotB)
+	-- Family (Crafting, Schematic etc)
+	return Sort:CompareValues(
+		tSlotA.itemInSlot:GetItemFamily(), 
+		tSlotB.itemInSlot:GetItemFamily())
 end
 
-Sort.tCategoryComparators = {
-	[130] = Sort.SlotSortOrderComparator_Category_SkillAMPs
+function Sort.Comparator_Category(tSlotA, tSlotB)	
+	-- Category (Family sub-category. For crafting it can be Mining, Technologist etc)
+	local result = Sort:CompareValues(
+		tSlotA.itemInSlot:GetItemCategory(), 
+		tSlotB.itemInSlot:GetItemCategory())
+	
+	if result ~= nil then
+		return result
+	else
+		-- Same category? Check category-specific comparators
+		if result == nil then
+			local cat = tSlotA.itemInSlot:GetItemCategory()
+			if Sort.tComparators_Category[cat] ~= nil then 		
+				local fComparator = Sort.tComparators_Category[cat]
+				return fComparator(tSlotA, tSlotB)			
+			end		
+		end
+	end
+end
+
+function Sort.Comparator_RequiredLevel(tSlotA, tSlotB)
+	local primaryA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary
+	local primaryB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary
+	
+	-- Level requirements
+	if primaryA.tLevelRequirement ~= nil or primaryB.tLevelRequirement ~= nil then
+		-- ItemA has no level requirements (but B does), so sort A before B
+		if primaryA.tLevelRequirement == nil then return true end
+		
+		-- ItemB has no level requirements (but A does), so sort B before A
+		if primaryB.tLevelRequirement == nil then return false end
+		
+		-- Both have level requirements. 
+		return Sort:CompareValues(primaryA.nLevelRequired, primaryB.nLevelRequired)		
+	end
+end
+
+function Sort.Comparator_Name(tSlotA, tSlotB)
+	return Sort:CompareValues(
+		tSlotA.itemInSlot:GetName(), 
+		tSlotB.itemInSlot:GetName())
+end
+
+function Sort.Comparator_CurrentIndex(tSlotA, tSlotB)
+	return Sort:CompareValues(
+		tSlotA.nIndex, 
+		tSlotB.nIndex)
+end
+
+
+function Sort.Comparator_Category_SkillAMPs(tSlotA, tSlotB)	
+	-- TODO: Handle multi-class
+	local classA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]
+	local classB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]	
+	
+	return Sort:CompareValues(
+		classA, 
+		classB)
+end
+
+-- Comparators, in order-of-execution. First comparator to identify a difference between A and B breaks the loop.
+Sort.tComparators = {
+	-- Overall "blank space seperated" family+category
+	Sort.Comparator_Family,
+	Sort.Comparator_Category, -- May call additional tCategoryComparator
+	
+	Sort.Comparator_RequiredLevel,
+	
+	-- General fallback sorting
+	Sort.Comparator_Name,
+	Sort.Comparator_CurrentIndex,
+}
+
+-- Index is category type
+Sort.tComparators_Category = {
+	[130] = Sort.Comparator_Category_SkillAMPs
 }
 	
 function Sort.SlotSortOrderComparator(tSlotA, tSlotB)
@@ -30,85 +102,25 @@ function Sort.SlotSortOrderComparator(tSlotA, tSlotB)
 
 	-- Shorthand variables to items in slots
 	local itemA, itemB = tSlotA.itemInSlot, tSlotB.itemInSlot
-
-	-- Same nil check on items as for slots
 	if itemA == nil or itemB == nil then return Sort:CompareNils(itemA, itemB) end
 	
+	-- All items are expected to have item details as well
+	local detailsA, detailsB = itemA:GetDetailedInfo(), itemB:GetDetailedInfo()
+	if detailsA == nil or detailsB == nil then return Sort:CompareNils(detailsA, detailsB) end
 	
-	-- Family (Crafting, Schematic etc)
-	if itemA:GetItemFamily() ~= itemB:GetItemFamily() then
-		return itemA:GetItemFamily() < itemB:GetItemFamily()
-	end
-	
-	-- Category (Family sub-category. For crafting it can be Mining, Technologist etc)
-	if itemA:GetItemCategory() ~= itemB:GetItemCategory() then
-		return itemA:GetItemCategory() < itemB:GetItemCategory()
-	end
-	
-	-- Category specific sorters
-	if Sort.tCategoryComparators[itemA:GetItemCategory()] ~= nil then 		
-		local fComparator = Sort.tCategoryComparators[itemA:GetItemCategory()]
+	for idx,fComparator in ipairs(Sort.tComparators) do
+		--Print("Comparator " .. idx)
 		local result = fComparator(tSlotA, tSlotB)
-		if result ~= nil then 
-			return result 
-		end
-		
-	end
-
-	-- Level requirements
-	if itemA:GetDetailedInfo().tPrimary.tLevelRequirement ~= nil or itemB:GetDetailedInfo().tPrimary.tLevelRequirement ~= nil then
-		if itemA:GetDetailedInfo().tPrimary.tLevelRequirement == nil then
-			-- ItemA has no level requirements (but B does), so sort A before B
-			return true
-		end
-		
-		if itemB:GetDetailedInfo().tPrimary.tLevelRequirement == nil then
-			-- ItemB has no level requirements (but A does), so sort B before A
-			return false			
-		end
-		
-		-- Both have level requirements. Only sort by this if they're different.
-		if itemA:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired ~= itemB:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired then
-			return itemA:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired < itemB:GetDetailedInfo().tPrimary.tLevelRequirement.nLevelRequired
+		if result ~= nil then
+			return result
 		end
 	end
 	
-	--TODO: item level
-
-	-- Item name
-	--[[
-	if Sort.bReverse then
-		if itemA:GetName() > itemB:GetName() then
-			return itemA:GetName() < itemB:GetName()
-		end
-	else
-		if itemA:GetName() ~= itemB:GetName() then
-			return itemA:GetName() < itemB:GetName()
-		end
-	end
-	--]]
-	if itemA:GetName() ~= itemB:GetName() then
-		return itemA:GetName() < itemB:GetName()
-	end
-	
-	-- Same family and category of item. Apply category-specific rules
-	-- TODO: pseudo code below
-	--if itemA:GetItemCategory == "amp" then
-		-- amp sort by class
-	--end
-	
-	-- TODO: Add category-id --> function map
-	
-	-- Default match (if no other rules apply) is to sort by current index
-	local result = tSlotA.nIndex < tSlotB.nIndex
-	--local result = itemA:GetInventoryId() < itemB:GetInventoryId()
-	--local result = itemA:GetItemId() < itemB:GetItemId()
-	
-	return result
+	--Print("WARNING: All comparators failed to sort slots " .. tSlotA.nIndex .. ":" .. tSlotA.itemInSlot:GetName() .. " vs " .. tSlotB.nIndex .. ":" .. tSlotB.itemInSlot:GetName())
+	--return true
 end
 
 function Sort:CompareNils(a, b)
-	Print("Comparing nils")
 	if a == nil and b == nil then
 		return false
 	end
@@ -118,6 +130,15 @@ function Sort:CompareNils(a, b)
 	if b == nil then
 		return true
 	end
+end
+
+function Sort:CompareValues(a, b)
+	if a ~= b then
+		return a < b
+	end
+	
+	-- Inconclusive, return nil (indicates further sorting)
+	return nil
 end
 
 function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
