@@ -61,16 +61,16 @@ function Sort.Comparator_Name(tSlotA, tSlotB)
 		tSlotB.itemInSlot:GetName())
 end
 
+function Sort.Comparator_ItemId(tSlotA, tSlotB)
+	return Sort:CompareValues(
+		tSlotA.itemInSlot:GetItemId(), 
+		tSlotB.itemInSlot:GetItemId())
+end
+
 function Sort.Comparator_CurrentIndex(tSlotA, tSlotB)
 	return Sort:CompareValues(
 		tSlotA.nIndex, 
 		tSlotB.nIndex)
-end
-
-function Sort.Comparator_InventoryId(tSlotA, tSlotB)
-	return Sort:CompareValues(
-		tSlotA.itemInSlot:GetInventoryId(), 
-		tSlotB.itemInSlot:GetInventoryId())
 end
 
 function Sort.Comparator_Category_Decor(tSlotA, tSlotB)
@@ -119,14 +119,21 @@ Sort.tComparators = {
 	Sort.Comparator_RequiredLevel,
 	
 	-- General fallback sorting
-	Sort.Comparator_Name,
-	--Sort.Comparator_CurrentIndex,
-	Sort.Comparator_InventoryId,
+--	Sort.Comparator_Name, -- I don't really like sorting by name, since that makes the sort client-language dependent
+						  -- TODO: NOT using _Name makes same-items swap back and forth. Find out why.
+	
+	
+	
+	-- TODO: Quality
+	-- TODO: Item Level	
+	Sort.Comparator_ItemId,
+	
+	Sort.Comparator_CurrentIndex,
 }
 
 -- Index is category type
 Sort.tComparators_Category = {
-	 [67] = Sort.Comparator_Category_Decor,
+	-- [67] = Sort.Comparator_Category_Decor,
 	[130] = Sort.Comparator_Category_SkillAMPs,
 	[135] = Sort.Comparator_Category_Runes,
 }
@@ -224,76 +231,49 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 	end
 end
 
--- After sorting, some slots may already contain an item of desired type 
--- Avoid switching multiple identical items back and forth by adjusting the 
--- sorted list with as-is tab content
-function Sort:AlignWithCurrentSlots(tSortedSlots, tCurrentSlots)
-	for _,tCurrentSlot in ipairs(tCurrentSlots) do
-		local strCurrentName = tCurrentSlot.itemInSlot:GetName()
-		local nCurrentInventoryId = tCurrentSlot.itemInSlot:GetInventoryId()
-		
-		if tSortedSlots[tCurrentSlot.nIndex] ~= nil and tSortedSlots[tCurrentSlot.nIndex].bIsBlank ~= true then
-			local strSortedName = tSortedSlots[tCurrentSlot.nIndex].itemInSlot:GetName()
-			local nSortedInventoryId = tSortedSlots[tCurrentSlot.nIndex].itemInSlot:GetInventoryId()
-			
-			if strCurrentName == strSortedName and nCurrentInventoryId ~= nSortedInventoryId then
-				-- Ok, so item with same name, but different inventoryId found. 
-				-- Adjust sorted-list so the item with this particular inventoryId is "sorted to" to tCurrentSlot.nIndex instead
-				local tSlotToSwap1 = tSortedSlots[tCurrentSlot.nIndex]
-				local tSlotToSwap2 = self:GetSlotByInventoryId(tSortedSlots, nCurrentInventoryId)
-				
-				--[[
-				Print(string.format("Swapping: Item1=[index: %d, itemId: %d, inventoryId: %d, name: %s] <--> Item1=[index: %d, itemId: %d, inventoryId: %d, name: %s]",
-					tSlotToSwap1.nIndex, tSlotToSwap1.itemInSlot:GetItemId(), tSlotToSwap1.itemInSlot:GetInventoryId(), tSlotToSwap1.itemInSlot:GetName(),
-					tSlotToSwap2.nIndex, tSlotToSwap2.itemInSlot:GetItemId(), tSlotToSwap2.itemInSlot:GetInventoryId(), tSlotToSwap2.itemInSlot:GetName()))
-				--]]
-
-				tSortedSlots[tCurrentSlot.nIndex] = tSlotToSwap2
-				tSortedSlots[tSlotToSwap2.nIndex] = tSlotToSwap1				
-			end
-		end	
-	end
-end
-
 function Sort:CalculateSortedList(guildOwner, nTab)
 	local tTabContent = GuildBankTools:GetCurrentTabSlots()
 	table.sort(tTabContent, Sort.SlotSortOrderComparator)
 	
 	Sort:DistributeBlanksSingle(tTabContent, GuildBankTools:GetCurrentTabSize())
 
-	-- After distributing spaces, realign indices on all contained slots' .nIndex with new actual index
+	-- After distributing spaces, realign indices on all contained slots' .nIndex with new sorted-index
 	for newIndex,entry in ipairs(tTabContent) do
 		entry.nIndex = newIndex
 	end
-
-	Sort:AlignWithCurrentSlots(tTabContent, GuildBankTools:GetCurrentTabSlots())
 	
-	-- And re-align .nIndex again after "soft-swapping" identical sorted slots
-	for newIndex,entry in ipairs(tTabContent) do
-		entry.nIndex = newIndex
-	end
-
 	-- Store result in self-variable
 	self.tSortedSlots = tTabContent
 end
 
-
--- TODO: Move to general?
-
-function Sort:GetSlotByInventoryId(tSlots, nInventoryId)
-	for idx, tSlot in ipairs(tSlots) do
-		if tSlot.bIsBlank ~= true and tSlot.itemInSlot:GetInventoryId() == nInventoryId then
+function Sort:GetSlotByIndex(tSlots, nIndex)
+	for idx,tSlot in ipairs(tSlots) do
+		if tSlot.nIndex == nIndex then
 			return tSlot
 		end
 	end
 end
 
-function Sort:GetSlotByIndex(tCurrentSlots, nIndex)
-	for idx, tSlot in ipairs(tCurrentSlots) do
-		if tSlot.nIndex == nIndex then
+function Sort:GetSlotByItemId(tSlots, nItemId, tIgnoreSlots)
+	tIgnoreSlots = tIgnoreSlots or {}
+	
+	for i=#tSlots,1,-1 do 
+		local tSlot = tSlots[i]
+		if tSlot.bIsBlank ~= true and tIgnoreSlots[tSlot.nIndex] == nil and tSlot.itemInSlot:GetItemId() == nItemId then
 			return tSlot
 		end
 	end
+end
+
+-- Get filtred table [idx->tSlot] of slots with only the specified itemId
+function Sort:GetSlotsWithItemId(tSlots, nItemId)
+	local result = {}
+	for _,tSlot in pairs(tSlots) do		
+		if tSlot.bIsBlank ~= true and tSlot.itemInSlot:GetItemId() == nItemId then
+			result[tSlot.nIndex] = tSlot			
+		end
+	end
+	return result
 end
 
 function Sort:Sort()	
@@ -303,17 +283,24 @@ function Sort:Sort()
 	-- All current bank slots, prior to sort operation
 	local tCurrentSlots = GuildBankTools.guildOwner:GetBankTab(GuildBankTools.nCurrentTab)
 	
-	-- Loop through sorted list of bank-slots, process first slot with incorrect InventoryId (first slot to move stuff into)
-	for _,tSortedTargetSlot in ipairs(self.tSortedSlots) do
+	-- Loop through sorted list of bank-slots, process first slot with incorrect item (by id) in it
+	for idx,tSortedTargetSlot in ipairs(self.tSortedSlots) do
 
 		if tSortedTargetSlot.bIsBlank == true then
 			-- Do nothing, just skip this blank slot
 		else
-			-- Find current source slot by scanning for slot which contains the desired inventory id
-			local tSourceSlot = Sort:GetSlotByInventoryId(tCurrentSlots, tSortedTargetSlot.itemInSlot:GetInventoryId())
-
-			-- Is the current placement of this inventory id at the correct index?
-			if tSortedTargetSlot.nIndex ~= tSourceSlot.nIndex then
+			-- Find current item occupying this index
+			local tCurrentSlot = Sort:GetSlotByIndex(tCurrentSlots, idx)
+						
+			-- Nothing in current slot, or current slot has different item
+			if tCurrentSlot == nil or tCurrentSlot.itemInSlot:GetItemId() ~= tSortedTargetSlot.itemInSlot:GetItemId() then
+				
+				-- List of correctly-sorted slots already containing this itemId. These should be ignored when looking for source mover-slot (irrellevant move).
+				local tIgnoreSlots = Sort:GetSlotsWithItemId(self.tSortedSlots, tSortedTargetSlot.itemInSlot:GetItemId())
+				
+				-- Locate source slot with this kind of itemId
+				local tSourceSlot = Sort:GetSlotByItemId(tCurrentSlots, tSortedTargetSlot.itemInSlot:GetItemId(), tIgnoreSlots)
+			
 				-- About to sort a slot. Determine if it is a move (to empty target), or swap (to already occupied target).			
 				local bIsSwap = Sort:GetSlotByIndex(tCurrentSlots, tSortedTargetSlot.nIndex) ~= nil
 
@@ -365,26 +352,29 @@ end
 function Sort:IsEverythingSorted()
 	local tCurrentSlots = GuildBankTools:GetCurrentTabSlots()
 	
-	-- Build map of current slot idx -> inventoryId
-	local tCurrentInventoryIds = {}
+	-- Run through list of sorted items, compare sorted with current ItemId for each slot	
+	-- For speed, first build map of current slot idx -> itemId
+	local tCurrentItemIds = {}
 	for _,tSlot in ipairs(tCurrentSlots) do
-		tCurrentInventoryIds[tSlot.nIndex] = tSlot.itemInSlot:GetInventoryId()
+		tCurrentItemIds[tSlot.nIndex] = tSlot.itemInSlot:GetItemId()
 	end
 	
 	-- Check if all slots match
 	for _,tSortedSlot in ipairs(self.tSortedSlots) do
 		if tSortedSlot.bIsBlank then
 			-- Blank sorted slot should not match any current slot
-			if tCurrentInventoryIds[tSortedSlot.nIndex] ~= nil then
+			if tCurrentItemIds[tSortedSlot.nIndex] ~= nil then
 				return false
 			end
 		else
-			local invId = tSortedSlot.itemInSlot:GetInventoryId()
-			if tCurrentInventoryIds[tSortedSlot.nIndex] ~= invId then
+			-- Non-blank sorted slot should have identical itemId in current slot
+			local itemId = tSortedSlot.itemInSlot:GetItemId()
+			if tCurrentItemIds[tSortedSlot.nIndex] ~= itemId then
 				return false
 			end
 		end
 	end
+		
 	return true
 end
 
