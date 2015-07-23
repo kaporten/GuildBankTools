@@ -67,9 +67,32 @@ function Sort.Comparator_CurrentIndex(tSlotA, tSlotB)
 		tSlotB.nIndex)
 end
 
+function Sort.Comparator_InventoryId(tSlotA, tSlotB)
+	return Sort:CompareValues(
+		tSlotA.itemInSlot:GetInventoryId(), 
+		tSlotB.itemInSlot:GetInventoryId())
+end
 
-function Sort.Comparator_Category_SkillAMPs(tSlotA, tSlotB)	
-	-- TODO: Handle multi-class
+function Sort.Comparator_Category_Decor(tSlotA, tSlotB)
+	-- First sort FABKits by name, then the rest by name
+	local nameA = tSlotA.itemInSlot:GetName()
+	local nameB = tSlotB.itemInSlot:GetName()
+	
+	local bIsFABKitA = string.find(nameA, "FABKit") ~= nil or string.find(nameA, "KITFab") ~= nil or  string.find(nameA, "BAUSatz") 
+	local bIsFABKitB = string.find(nameB, "FABKit") ~= nil or string.find(nameB, "KITFab") ~= nil or  string.find(nameB, "BAUSatz") 
+	
+	if bIsFABKitA or bIsFABKitB then
+		if bIsFABKitA and not bIsFABKitB then
+			return true
+		elseif not bIsFABKitA and bIsFABKitB then
+			return false
+		else
+			return Sort:CompareValues(nameA, nameB)
+		end
+	end
+end
+
+function Sort.Comparator_Category_SkillAMPs(tSlotA, tSlotB)		
 	local classA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]
 	local classB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]	
 	
@@ -78,22 +101,34 @@ function Sort.Comparator_Category_SkillAMPs(tSlotA, tSlotB)
 		classB)
 end
 
+function Sort.Comparator_Category_Runes(tSlotA, tSlotB)
+	local runeSortOrderA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.tRuneInfo.nSortOrder
+	local runeSortOrderB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.tRuneInfo.nSortOrder
+	
+	return Sort:CompareValues(
+		runeSortOrderA, 
+		runeSortOrderB)
+end
+
 -- Comparators, in order-of-execution. First comparator to identify a difference between A and B breaks the loop.
 Sort.tComparators = {
 	-- Overall "blank space seperated" family+category
 	Sort.Comparator_Family,
-	Sort.Comparator_Category, -- May call additional tCategoryComparator
+	Sort.Comparator_Category, -- May call additional tComparators_Category
 	
 	Sort.Comparator_RequiredLevel,
 	
 	-- General fallback sorting
 	Sort.Comparator_Name,
-	Sort.Comparator_CurrentIndex,
+	--Sort.Comparator_CurrentIndex,
+	Sort.Comparator_InventoryId,
 }
 
 -- Index is category type
 Sort.tComparators_Category = {
-	[130] = Sort.Comparator_Category_SkillAMPs
+	 [67] = Sort.Comparator_Category_Decor,
+	[130] = Sort.Comparator_Category_SkillAMPs,
+	[135] = Sort.Comparator_Category_Runes,
 }
 	
 function Sort.SlotSortOrderComparator(tSlotA, tSlotB)
@@ -205,7 +240,7 @@ function Sort:AlignWithCurrentSlots(tSortedSlots, tCurrentSlots)
 				-- Ok, so item with same name, but different inventoryId found. 
 				-- Adjust sorted-list so the item with this particular inventoryId is "sorted to" to tCurrentSlot.nIndex instead
 				local tSlotToSwap1 = tSortedSlots[tCurrentSlot.nIndex]
-				local tSlotToSwap2 = self:GetSlotByInventoryId(tSortedSlots, nSortedInventoryId)
+				local tSlotToSwap2 = self:GetSlotByInventoryId(tSortedSlots, nCurrentInventoryId)
 				
 				--[[
 				Print(string.format("Swapping: Item1=[index: %d, itemId: %d, inventoryId: %d, name: %s] <--> Item1=[index: %d, itemId: %d, inventoryId: %d, name: %s]",
@@ -243,7 +278,7 @@ function Sort:CalculateSortedList(guildOwner, nTab)
 end
 
 
--- TODO: Move to general
+-- TODO: Move to general?
 
 function Sort:GetSlotByInventoryId(tSlots, nInventoryId)
 	for idx, tSlot in ipairs(tSlots) do
@@ -279,7 +314,6 @@ function Sort:Sort()
 
 			-- Is the current placement of this inventory id at the correct index?
 			if tSortedTargetSlot.nIndex ~= tSourceSlot.nIndex then
-					
 				-- About to sort a slot. Determine if it is a move (to empty target), or swap (to already occupied target).			
 				local bIsSwap = Sort:GetSlotByIndex(tCurrentSlots, tSortedTargetSlot.nIndex) ~= nil
 
@@ -298,7 +332,7 @@ function Sort:Sort()
 					})
 				end
 				
-				--Print(string.format("Moving [nTargetIdx=%d]:(ItemId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetItemId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
+				--Print(string.format("Moving [nTargetIdx=%d]:(InventoryId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetInventoryId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
 				
 				-- Fire off the update by beginning and ending the bank transfer from source to target.
 				GuildBankTools.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
