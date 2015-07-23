@@ -148,9 +148,7 @@ function GuildBankTools:OnStackButton_MouseExit(wndHandler, wndControl, x, y)
 	GuildBankTools:HighlightSearchMatches()
 end
 
-function Stack:Enable(bInProgress)
-	Print("Enable: Stack (in progress: " .. tostring(bInProgress))
-	
+function Stack:Enable(bInProgress)	
 	-- Text on button depends on in-progress or not
 	local text = bInProgress and "..." or "Stack"
 
@@ -166,7 +164,6 @@ function Stack:Enable(bInProgress)
 end
 
 function Stack:Disable()
-	Print("Disable: Stack")
 	local wndButton = GuildBankTools.wndOverlayForm:FindChild("StackButton")
 	if wndButton ~= nil then
 		wndButton:Enable(false)

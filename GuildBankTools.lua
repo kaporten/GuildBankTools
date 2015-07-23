@@ -176,7 +176,6 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	
 	-- Re-enable modules (enable buttons)
 	for eModule,module in pairs(self.tModules) do
-		Print("tab-change-enabling" .. eModule)
 		module:Enable(false) -- None are in progress
 	end	
 	
@@ -206,7 +205,6 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 		self.tModules.Sort:CalculateSortedList()
 		
 		for eModule,module in pairs(self.tModules) do
-			Print("unexpected event-enabling")
 			module:Enable(false) 
 		end				
 	else
@@ -234,7 +232,6 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 		-- Re-enable in-progress module (update button)
 		for eModule,module in pairs(self.tModules) do
 			if eModule == eModuleInProgress then
-				Print("event re-enabling" .. eModule)
 				module:Enable(true) 
 			end
 		end			
@@ -273,7 +270,6 @@ function GuildBankTools:StartModule(eModule)
 	-- After stopping/disabling everything (else), enable the one which was just started
 	for e,module in pairs(self.tModules) do	
 		if eModule == e then
-			Print("Start-enabling " .. eModule)
 			module:Enable(true)
 		end
 	end

@@ -367,8 +367,6 @@ end
 
 
 function Sort:Enable(bInProgress)
-	Print("Enable: Sort (in progress: " .. tostring(bInProgress))
-	
 	local text = bInProgress and "..." or "Sort"
 
 	-- Enable button?
@@ -383,7 +381,6 @@ function Sort:Enable(bInProgress)
 end
 
 function Sort:Disable()
-	Print("Disable: Sort")
 	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
 	if wndButton ~= nil then
 		wndButton:Enable(false)
