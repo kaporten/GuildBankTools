@@ -19,11 +19,10 @@ GuildBankTools.enumOpacity = {
 	Visible = 1
 }
 
--- Asynchronous event-driven operation types
--- Key = Operation name
-GuildBankTools.enumOperations = {
+-- Enum of modules to load. Each module is expected to conform to the same interface (Enable, Disable, Execute
+GuildBankTools.enumModules = {
 	Stack = "Stack",
-	Sort = "Sort"
+	Sort = "Sort",
 }	
 
 function GuildBankTools:new(o)
@@ -39,23 +38,29 @@ function GuildBankTools:Init()
 	if Apollo.GetAddon("GuildBankTools") ~= nil then
 		return
 	end
-
-	-- Ensure tSettings table always exist, even if there are no saved settings
-	self.tSettings = self.tSettings or {}
-	
-	-- Default value for throttle, used when async event-operations such as stack/sort needs to be taken down a notch in speed (due to busy bank)
-	self.nThrottleTimer = 0
-	
-	-- Initially, no operations are in progress. Explicitly register "false" for all.
-	self.tInProgress = {}
-	for e,_ in pairs(GuildBankTools.enumOperations) do
-		self.tInProgress[e] = false
-	end
 	
 	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
 end
 
-function GuildBankTools:OnLoad()	
+function GuildBankTools:OnLoad()
+	-- Load sub-modules
+	self.tModules = {}
+	for m,_ in pairs(GuildBankTools.enumModules) do
+		self.tModules[m] = Apollo.GetPackage("GuildBankTools:" .. m).tPackage
+	end
+	
+	-- Ensure tSettings table always exist, even if there are no saved settings
+	self.tSettings = self.tSettings or {}
+	
+	-- Default value for throttle, used when async event-operations such as stack/sort needs to be taken down a notch in speed (due to busy bank)
+	self.nThrottleTimer = 2
+	
+	-- Initially, no operations are in progress. Explicitly register "false" for all.
+	self.tInProgress = {}
+	for e,_ in pairs(GuildBankTools.enumModules) do
+		self.tInProgress[e] = false
+	end
+
 	-- Store ref for Guild Bank
 	GB = Apollo.GetAddon("GuildBank")	
 	if GB == nil then
@@ -111,13 +116,13 @@ function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResu
 	else
 		-- Bank complains that it's busy (due to sort/stack spam)
 		-- Is it me spamming? (is there an in-progress operation?)
-		local eOperationInProgress = GBT:GetInProgressOperation()
+		local eModuleInProgress = GBT:GetInProgressModule()
 	
-		if eOperationInProgress ~= nil then
+		if eModuleInProgress ~= nil then
 			-- Yep, GuildBankTools is spamming
 			-- "Eat" the busy signal event, engage throttle, and continue the operation
 			GBT.nThrottleTimer = 1
-			GBT:ExecuteThrottledOperation(eOperationInProgress)		
+			GBT:ExecuteThrottledOperation(eModuleInProgress)		
 		else
 			-- Something else did this, pass the signal on to GuildAlerts
 			GBT.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
@@ -154,16 +159,26 @@ function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
 	self.nCurrentTab = nTab
 	self.guildOwner = guildOwner
 	
-	-- Changed tab, interrupt any in-progress stacking
-	self:StopAllOperations()
+	-- Changed tab, interrupt any in-progress operations
+	local eInProgress = self:GetInProgressModule()
+	if eInProgress ~= nil then 
+		self:StopModule(eInProgress)
+	end
 	
+	-- Initially disable all modules after tab-change (dead buttons)
+	for eModule,module in pairs(self.tModules) do
+		module:Disable()
+	end
+
+	-- Calculate list of stackable & sortable items
+	self.tModules.Stack:IdentifyStackableItems()
+	self.tModules.Sort:CalculateSortedList()
 	
-	-- Calculate list of stackable items
-	self:IdentifyStackableItems()
-		
-	-- Calculate sorted list of items
-	self.GBT_Sort:CalculateSortedList(guildOwner, nTab)
-	self.GBT_Sort:UpdateSortButton()
+	-- Re-enable modules (enable buttons)
+	for eModule,module in pairs(self.tModules) do
+		Print("tab-change-enabling" .. eModule)
+		module:Enable(false) -- None are in progress
+	end	
 	
 	-- Then highlight any search criteria matches
 	self:HighlightSearchMatches()
@@ -180,25 +195,49 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 	if self.wndOverlayForm == nil or self.wndOverlayForm:FindChild("ContentArea") == nil or (not self.wndOverlayForm:FindChild("ContentArea"):IsShown()) then
 		return
 	end
+	
+	-- Is any module in progress?
+	local eModuleInProgress = self:GetInProgressModule()
+	
+	if eModuleInProgress == nil then
+		-- User, or some other guildie modified guild bank (since I'm not doing anything... intentionally at least)
+		-- So just recalculate state, modules will be enabled (button updated) after this if/else block
+		self.tModules.Stack:IdentifyStackableItems()
+		self.tModules.Sort:CalculateSortedList()
 		
-	-- Re-calculate stackable items list
-	self:IdentifyStackableItems()
-	
-	-- Re-calculate sorted list of items
-	self.GBT_Sort:CalculateSortedList(guildOwner, nTab)	
-	self.GBT_Sort:UpdateSortButton()
-	
-	-- Is any operation in progress?
-	local eOperationInProgress = self:GetInProgressOperation()
-	
-	if eOperationInProgress ~= nil then
+		for eModule,module in pairs(self.tModules) do
+			Print("unexpected event-enabling")
+			module:Enable(false) 
+		end				
+	else
 		-- Remove pending event from list of expected events for in-progress operation
-		self:RemovePendingGuildBankEvent(eOperationInProgress, nInventorySlot, bRemoved)
+		local bMatched = self:RemovePendingGuildBankEvent(eModuleInProgress, nInventorySlot, bRemoved)
 		
-		-- All events handled? If so, fire off next pass of sort/stack
-		if self:HasPendingGuildBankEvents(eOperationInProgress) == false then
-			self:ExecuteThrottledOperation(eOperationInProgress)
+		if not bMatched then
+			-- Uh-oh... this event was not meant for me. Stop in-progress module then.
+			self:StopModule(eModuleInProgress)
+	
+			-- Re-calculate stack/sort lists
+			self.tModules.Stack:IdentifyStackableItems()
+			self.tModules.Sort:CalculateSortedList()		
+		else
+			-- Event was expected. Are we waiting for more events?
+			if self:HasPendingGuildBankEvents(eModuleInProgress) == false then
+				-- All partial events received, recalculate
+				self.tModules.Stack:IdentifyStackableItems()
+				self.tModules.Sort:CalculateSortedList()		
+
+				self:ExecuteThrottledOperation(eModuleInProgress)
+			end
 		end
+		
+		-- Re-enable in-progress module (update button)
+		for eModule,module in pairs(self.tModules) do
+			if eModule == eModuleInProgress then
+				Print("event re-enabling" .. eModule)
+				module:Enable(true) 
+			end
+		end			
 	end
 	
 	-- Once all real processing is done, update the filtering if needed
@@ -208,86 +247,102 @@ end
 
 --[[ Control of in-progress operations --]]
 
-function GuildBankTools:StopOperation(eOperation)
-	self.tInProgress[eOperation] = nil
+
+function GuildBankTools:StopModule(eModule)
+	self.tInProgress[eModule] = false
+	
+	-- When stopping a module, all modules can be enabled again
+	for e,module in pairs(self.tModules) do	
+		module:Enable(false)
+	end	
 end
 
--- Doesn't actually start anything, but registers something as started.
--- 2nd and 3rd parameters are object.function for repeated calls once all "must wait for" events have been received
-function GuildBankTools:StartOperation(eOperation, tObject, strOperation)
-	self.tInProgress[eOperation] = {tObject = tObject, strOperation = strOperation}
+
+function GuildBankTools:StartModule(eModule)
+	
+	-- When starting a module, all other modules must be stoppend and disabled
+	for e,module in pairs(self.tModules) do	
+		if eModule ~= e then	
+			self:StopModule(e)
+			module:Disable()
+		end
+	end
+
+	self.tInProgress[eModule] = true
+	
+	-- After stopping/disabling everything (else), enable the one which was just started
+	for e,module in pairs(self.tModules) do	
+		if eModule == e then
+			Print("Start-enabling " .. eModule)
+			module:Enable(true)
+		end
+	end
+	
+	-- Call the async :Execute() operation for this module
+	self:ExecuteThrottledOperation(eModule)
 end
 
-function GuildBankTools:ExecuteThrottledOperation(eOperation)
+function GuildBankTools:GetInProgressModule()
+	for eModule,bInProgress in pairs(self.tInProgress) do
+		if bInProgress then
+			return eModule
+		end
+	end
+end
+
+function GuildBankTools:IsInProgress(eModule)
+	return self:GetInProgressModule() == eModule	
+end
+
+
+function GuildBankTools:ExecuteThrottledOperation(eModule)
 	-- Start timer
-	self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, self.tInProgress[eOperation].strOperation, self.tInProgress[eOperation].tObject)
+	self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Execute", self.tModules[eModule])
 	
 	-- Decrease throttled delay by 0.25 sec for next pass
 	self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottleTimer-0.25 or 0
 end
 
 
---[[ Delegate methods for async operations --]]
-
-function GuildBankTools:Sort()
-	self.GBT_Sort:Sort()
-end
-
-
-
-function GuildBankTools:StopAllOperations()
-	-- Set kill-flag for all operations
-	for eOperation, bInProgress in pairs(self.tInProgress) do
-		self:StopOperation(eOperation)
-	end
-end
-
-function GuildBankTools:IsOperationInProgress(eOperation)
-	return self.tInProgress[eOperation]
-end
-
-function GuildBankTools:GetInProgressOperation()
-	-- Just return first-hit operation, stopping an operation removes it from the list,
-	-- so the assumption is that self.tInProgress is {} or has exactly 1 k/v pair.
-	for eOperation, fOperation in pairs(self.tInProgress) do
-		return eOperation
-	end
-end
 
 
 --[[ Control of pending events for asynchronous operation --]]
 
-function GuildBankTools:SetPendingEvents(eOperation, tPendingEvents)	
+function GuildBankTools:SetPendingEvents(eModule, tPendingEvents)	
 	self.tPendingEvents = self.tPendingEvents or {}
-	self.tPendingEvents[eOperation] = tPendingEvents
+	self.tPendingEvents[eModule] = tPendingEvents
 end
 
-function GuildBankTools:RemovePendingGuildBankEvent(eOperation, nUpdatedInventorySlot, bRemoved)
+function GuildBankTools:RemovePendingGuildBankEvent(eModule, nUpdatedInventorySlot, bRemoved)
 	self.tPendingEvents = self.tPendingEvents or {}
-	self.tPendingEvents[eOperation] = self.tPendingEvents[eOperation] or {}
+	self.tPendingEvents[eModule] = self.tPendingEvents[eModule] or {}
 	
-	local tPendingForOperation = self.tPendingEvents[eOperation]
+	local tPendingForModule = self.tPendingEvents[eModule]
+	local bMatch = false
 	
-	if tPendingForOperation ~= nil and type(tPendingForOperation[nUpdatedInventorySlot]) == "table" then
-		local tPending = tPendingForOperation[nUpdatedInventorySlot]
+	if tPendingForModule ~= nil and type(tPendingForModule[nUpdatedInventorySlot]) == "table" then
+		local tPending = tPendingForModule[nUpdatedInventorySlot]
 		for i,b in ipairs(tPending) do
 			if b == bRemoved then				
 				table.remove(tPending, i)
+				bMatch = true
 			end
 			
 			if #tPending == 0 then
-				tPendingForOperation[nUpdatedInventorySlot] = nil
+				tPendingForModule[nUpdatedInventorySlot] = nil
 			end
 		end
 	end
+	
+	return bMatch
 end
 
-function GuildBankTools:HasPendingGuildBankEvents(eOperation)
-	if self.tPendingEvents == nil or self.tPendingEvents[eOperation] == nil then return
+function GuildBankTools:HasPendingGuildBankEvents(eModule)
+	if self.tPendingEvents == nil or self.tPendingEvents[eModule] == nil then return
 		false
 	end
 	
-	for k,v in pairs(self.tPendingEvents[eOperation]) do
+	for k,v in pairs(self.tPendingEvents[eModule]) do
 		return true
 	end
 	

@@ -2,14 +2,7 @@
 local GuildBankTools = Apollo.GetAddon("GuildBankTools")
 local GB = Apollo.GetAddon("GuildBank")
 
-
-	--[[ (local) Sorting functions --]]
-
-
 local Sort = {}
-GuildBankTools.GBT_Sort = Sort
-	
-
 
 function Sort.Comparator_Family(tSlotA, tSlotB)
 	-- Family (Crafting, Schematic etc)
@@ -231,7 +224,7 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 	end
 end
 
-function Sort:CalculateSortedList(guildOwner, nTab)
+function Sort:CalculateSortedList()
 	local tTabContent = GuildBankTools:GetCurrentTabSlots()
 	table.sort(tTabContent, Sort.SlotSortOrderComparator)
 	
@@ -276,9 +269,9 @@ function Sort:GetSlotsWithItemId(tSlots, nItemId)
 	return result
 end
 
-function Sort:Sort()	
-	-- Start async event-driven process.
-	GuildBankTools:StartOperation(GuildBankTools.enumOperations.Sort, self, "Sort")
+
+-- Main module operation
+function Sort:Execute()	
 	
 	-- All current bank slots, prior to sort operation
 	local tCurrentSlots = GuildBankTools.guildOwner:GetBankTab(GuildBankTools.nCurrentTab)
@@ -307,13 +300,13 @@ function Sort:Sort()
 				-- Expected events to process before triggering next move depends on swap or move.
 				if bIsSwap == true then
 					-- Swap fires bRemoved=true|false events for both slots
-					GuildBankTools:SetPendingEvents(GuildBankTools.enumOperations.Sort, {
+					GuildBankTools:SetPendingEvents(GuildBankTools.enumModules.Sort, {
 						[tSortedTargetSlot.nIndex] = {true, false}, 
 						[tSourceSlot.nIndex] = {true, false}
 					})
 				else				
 					-- Move fires bRemoved=true for source, bRemoved=false for target
-					GuildBankTools:SetPendingEvents(GuildBankTools.enumOperations.Sort, {
+					GuildBankTools:SetPendingEvents(GuildBankTools.enumModules.Sort, {
 						[tSortedTargetSlot.nIndex] = {false}, 
 						[tSourceSlot.nIndex] = {true}
 					})
@@ -340,20 +333,7 @@ function Sort:Sort()
 	end
 	
 	-- Nothing moved in for-loop, guess we're all done sorting	
-	GuildBankTools:StopOperation(GuildBankTools.enumOperations.Sort)
-end
-
-function Sort:UpdateSortButton()
-	-- Do nothing if overlay form is not loaded
-	if GuildBankTools.wndOverlayForm == nil then
-		return
-	end
-		
-	local bEnable = not self:IsEverythingSorted()
-	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
-	if wndButton ~= nil then
-		wndButton:Enable(bEnable)	
-	end
+	GuildBankTools:StopModule(GuildBankTools.enumModules.Sort)
 end
 
 function Sort:IsEverythingSorted()
@@ -386,11 +366,41 @@ function Sort:IsEverythingSorted()
 end
 
 
+function Sort:Enable(bInProgress)
+	Print("Enable: Sort (in progress: " .. tostring(bInProgress))
+	
+	local text = bInProgress and "..." or "Sort"
+
+	-- Enable button?
+	local bEnable = bInProgress or not self:IsEverythingSorted()
+	
+	-- Update button
+	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
+	if wndButton ~= nil then
+		wndButton:Enable(bEnable)
+		wndButton:SetText(text)
+	end	
+end
+
+function Sort:Disable()
+	Print("Disable: Sort")
+	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
+	if wndButton ~= nil then
+		wndButton:Enable(false)
+		wndButton:SetText("Sort")
+	end	
+end
+
+
 	--[[ Button events --]]
 
 	-- TODO: Load/handle compartmentalized sort-form from this file
 function GuildBankTools:OnSortButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
-	Sort:Sort()
+	if GuildBankTools:IsInProgress(GuildBankTools.enumModules.Sort) then
+		GuildBankTools:StopModule(GuildBankTools.enumModules.Sort)
+	else
+		GuildBankTools:StartModule(GuildBankTools.enumModules.Sort)
+	end
 end
 
 function GuildBankTools:OnSortButton_MouseEnter(wndHandler, wndControl, x, y)
@@ -401,3 +411,5 @@ end
 function GuildBankTools:OnSortButton_MouseExit(wndHandler, wndControl, x, y)
 --	Print("OnSortButton_MouseExit")	
 end
+
+Apollo.RegisterPackage(Sort, "GuildBankTools:Sort", 1, {}) 

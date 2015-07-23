@@ -2,14 +2,15 @@
 local GuildBankTools = Apollo.GetAddon("GuildBankTools")
 local GB = Apollo.GetAddon("GuildBank")
 
+local Stack = {}
 
 -- Scans current guild bank tab, returns list containing list of stackable slots
-function GuildBankTools:IdentifyStackableItems()
+function Stack:IdentifyStackableItems()
 	-- Identify all stackable slots in the current tab, and add to tStackableItems
 	-- This includes stackables with just 1 stack (ie. nothing to stack with)
 	-- tStackableItems is a table with key=itemId, value=list of slots containing this itemId
 	local tStackableItems = {}
-	for _,tSlot in ipairs(self.guildOwner:GetBankTab(self.nCurrentTab)) do
+	for _,tSlot in ipairs(GuildBankTools:GetCurrentTabSlots()) do
 		if tSlot ~= nil and self:IsItemStackable(tSlot.itemInSlot) then
 			local nItemId = tSlot.itemInSlot:GetItemId()
 			
@@ -33,39 +34,22 @@ function GuildBankTools:IdentifyStackableItems()
 
 	-- Store in addon scope
 	self.tStackable = tStackable
-	
-	-- Update Stack button enable-status
-	self:UpdateStackButton()
-end
-
-function GuildBankTools:UpdateStackButton()
-	-- Do nothing if overlay form is not loaded
-	if self.wndOverlayForm == nil then
-		return
-	end
-	
-	local bEnable = self.tStackable ~= nil and #self.tStackable > 0
-	local wndButton = self.wndOverlayForm:FindChild("StackButton")
-	if wndButton ~= nil then
-		wndButton:Enable(bEnable)	
-	end
 end
 
 -- An item is considered stackable if it has a current stacksize < max stacksize.
-function GuildBankTools:IsItemStackable(tItem)	
+function Stack:IsItemStackable(tItem)	
 	return tItem:GetMaxStackCount() > 1 and tItem:GetStackCount() < tItem:GetMaxStackCount()
 end
+
 
 -- Performs one single stacking operation.
 -- Sets a flag indicating if further stacking is possible, but takes no further action 
 -- (awaits Event indicating this stacking-operation has fully completed)
-function GuildBankTools:Stack()
-	-- Start async event-driven process.
-	GuildBankTools:StartOperation(GuildBankTools.enumOperations.Stack, self, "Stack")
+function Stack:Execute()
 	
-	-- Safeguard, but should only happen if someone calls :Stack() before opening the guild bank
+	-- Safeguard, but should only happen if someone calls :Execute() before opening the guild bank
 	if self.tStackable == nil then
-		self:StopOperation(self.enumOperations.Stack)		
+		GuildBankTools:StopModule(GuildBankTools.enumModules.Stack)		
 		return
 	end
 	
@@ -74,7 +58,7 @@ function GuildBankTools:Stack()
 	
 	-- Nothing in self.tStackable? Just do nothing then.
 	if tSlots == nil then
-		self:StopOperation(self.enumOperations.Stack)
+		GuildBankTools:StopModule(GuildBankTools.enumModules.Stack)
 		return
 	end
 
@@ -102,44 +86,27 @@ function GuildBankTools:Stack()
 	local bPartialMove = nItemsToMove < tSourceSlot.itemInSlot.GetStackCount()
 	if bPartialMove then
 		-- Partial move (only part of source stack is moved into target) updates target and updates source
-		self:SetPendingEvents(self.enumOperations.Stack, {
+		GuildBankTools:SetPendingEvents(GuildBankTools.enumModules.Stack, {
 			[tTargetSlot.nIndex] = {false}, 
 			[tSourceSlot.nIndex] = {false}
 		})
 	else
 		-- Full move (entire source stack is moved into target) updates target and removes source
-		self:SetPendingEvents(self.enumOperations.Stack, {
+		GuildBankTools:SetPendingEvents(GuildBankTools.enumModules.Stack, {
 			[tTargetSlot.nIndex] = {false}, 
 			[tSourceSlot.nIndex] = {true}
 		})
 	end
 	
 	-- Fire off the update by beginning and ending the bank transfer from source to target.
-	self.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, nItemsToMove)
+	GuildBankTools.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, nItemsToMove)
 	
 	-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
-	self.guildOwner:EndBankItemTransfer(self.nCurrentTab, tTargetSlot.nIndex) 
-end
-
--- When the stack-button is clicked, just execute the stack operation
-function GuildBankTools:OnStackButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
-	self:Stack()
-end
-
--- When mousing over the button, change bank-slot opacity to identify stackables
-function GuildBankTools:OnStackButton_MouseEnter(wndHandler, wndControl, x, y)
-	if wndControl:IsEnabled() then
-		self:HighlightStackables()
-	end
-end
-
--- When no longer hovering over the button, reset opacity for stackables to whatever matches search criteria
-function GuildBankTools:On_StackButton_MouseExit(wndHandler, wndControl, x, y)
-	self:HighlightSearchMatches()
+	GuildBankTools.guildOwner:EndBankItemTransfer(GuildBankTools.nCurrentTab, tTargetSlot.nIndex) 
 end
 
 -- Highlight all items-to-stack on the current tab
-function GuildBankTools:HighlightStackables()
+function Stack:HighlightStackables()
 	-- Build lookuptable of all stackable indices. Key=bank slot index, Value=true (value not used).
 	local tStackableSlotIdx = {}
 	for _,tStackableItem in ipairs(self.tStackable) do
@@ -159,3 +126,54 @@ function GuildBankTools:HighlightStackables()
 		end
 	end	
 end
+
+-- When the stack-button is clicked, just execute the stack operation
+function GuildBankTools:OnStackButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
+	if GuildBankTools:IsInProgress(GuildBankTools.enumModules.Stack) then
+		GuildBankTools:StopModule(GuildBankTools.enumModules.Stack)
+	else
+		GuildBankTools:StartModule(GuildBankTools.enumModules.Stack)
+	end	
+end
+
+-- When mousing over the button, change bank-slot opacity to identify stackables
+function GuildBankTools:OnStackButton_MouseEnter(wndHandler, wndControl, x, y)
+	if wndControl:IsEnabled() then
+		Stack:HighlightStackables()
+	end
+end
+
+-- When no longer hovering over the button, reset opacity for stackables to whatever matches search criteria
+function GuildBankTools:OnStackButton_MouseExit(wndHandler, wndControl, x, y)
+	GuildBankTools:HighlightSearchMatches()
+end
+
+function Stack:Enable(bInProgress)
+	Print("Enable: Stack (in progress: " .. tostring(bInProgress))
+	
+	-- Text on button depends on in-progress or not
+	local text = bInProgress and "..." or "Stack"
+
+	-- Enable button depends on stackable items or not, and also if other modules are in progress
+	local bEnable = bInProgress or (self.tStackable ~= nil and #self.tStackable > 0)
+	
+	-- Update button
+	local wndButton = GuildBankTools.wndOverlayForm:FindChild("StackButton")
+	if wndButton ~= nil then
+		wndButton:Enable(bEnable)
+		wndButton:SetText(text)
+	end	
+end
+
+function Stack:Disable()
+	Print("Disable: Stack")
+	local wndButton = GuildBankTools.wndOverlayForm:FindChild("StackButton")
+	if wndButton ~= nil then
+		wndButton:Enable(false)
+		wndButton:SetText("Stack")
+	end	
+end
+
+
+
+Apollo.RegisterPackage(Stack, "GuildBankTools:Stack", 1, {}) 
