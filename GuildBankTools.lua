@@ -7,7 +7,7 @@ require "Apollo"
 require "Window"
 
 -- Addon class itself
-local Major, Minor, Patch = 3, 0, 0
+local Major, Minor, Patch = 3, 0, 1
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -81,11 +81,21 @@ function GuildBankTools:OnLoad()
 	
 	-- Hook into GuildAlerts to suppress the "guild bank busy" log message / throttle speed when it occurs
 	local GA = Apollo.GetAddon("GuildAlerts")
-	self.Orig_GA_OnGuildResult = GA.OnGuildResult
-	GA.OnGuildResult = self.Hook_GA_OnGuildResult	
+	if GA ~= nil then
+		self.Orig_GA_OnGuildResult = GA.OnGuildResult
+		GA.OnGuildResult = self.Hook_GA_OnGuildResult	
+	else
+		Apollo.RegisterEventHandler("GuildResult", "OnGuildResult", self) 
+	end
 	
 	-- Register with addon "OneVersion"
 	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
+end
+
+function GuildBankTools:OnDependencyError()	
+	if Apollo.GetAddon("GuildBank") ~= nil then	
+		return true
+	else	
 end
 
 function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)	
@@ -130,6 +140,12 @@ function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResu
 	end
 end
 
+function GuildBankTools:OnGuildResult(guildSender, strName, nRank, eResult)
+	if eResult == GuildLib.GuildResult_Busy and GuildBankTools:GetInProgressModule() ~= nil then
+		GuildBankTools.nThrottleTimer = 1
+		GuildBankTools:ExecuteThrottledOperation(eModuleInProgress)		
+	end
+end
 
 -- Whenever bank tab is changed, interrupt stacking (if it is in progress) and calc stackability
 function GuildBankTools:OnGuildBankTab(guildOwner, nTab)	
