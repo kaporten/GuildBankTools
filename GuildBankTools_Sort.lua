@@ -320,13 +320,20 @@ function Sort:Sort()
 				end
 				
 				--Print(string.format("Moving [nTargetIdx=%d]:(InventoryId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetInventoryId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
+
+				-- Pulse both source and target
+				if GB ~= nil then
+					local bankwnds = GB.tWndRefs.tBankItemSlots
+					bankwnds[tSourceSlot.nIndex]:TransitionPulse()
+					bankwnds[tSortedTargetSlot.nIndex]:TransitionPulse()
+				end	
 				
 				-- Fire off the update by beginning and ending the bank transfer from source to target.
 				GuildBankTools.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
 				
 				-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
 				GuildBankTools.guildOwner:EndBankItemTransfer(GuildBankTools.nCurrentTab, tSortedTargetSlot.nIndex) 
-
+				
 				return
 			end
 		end
