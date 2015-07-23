@@ -53,7 +53,7 @@ function GuildBankTools:OnLoad()
 	self.tSettings = self.tSettings or {}
 	
 	-- Default value for throttle, used when async event-operations such as stack/sort needs to be taken down a notch in speed (due to busy bank)
-	self.nThrottleTimer = 2
+	self.nThrottleTimer = 0
 	
 	-- Initially, no operations are in progress. Explicitly register "false" for all.
 	self.tInProgress = {}
