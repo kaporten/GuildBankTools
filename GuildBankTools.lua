@@ -51,10 +51,7 @@ function GuildBankTools:OnLoad()
 	
 	-- Ensure tSettings table always exist, even if there are no saved settings
 	self.tSettings = self.tSettings or {}
-	
-	-- Default value for throttle, used when async event-operations such as stack/sort needs to be taken down a notch in speed (due to busy bank)
-	self.nThrottleTimer = 0
-	
+		
 	-- Initially, no operations are in progress. Explicitly register "false" for all.
 	self.tInProgress = {}
 	for e,_ in pairs(GuildBankTools.enumModules) do
@@ -92,10 +89,12 @@ function GuildBankTools:OnLoad()
 	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
 end
 
-function GuildBankTools:OnDependencyError()	
-	if Apollo.GetAddon("GuildBank") ~= nil then	
+function GuildBankTools:OnDependencyError(strDep, strErr)
+	-- GuildAlerts is optional
+	if strDep == "GuildAlerts" then
 		return true
-	else	
+	end	
+	return false
 end
 
 function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)	
@@ -128,10 +127,15 @@ function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResu
 		-- Is it me spamming? (is there an in-progress operation?)
 		local eModuleInProgress = GBT:GetInProgressModule()
 	
-		if eModuleInProgress ~= nil then
+		if eModuleInProgress ~= nil then		
 			-- Yep, GuildBankTools is spamming
 			-- "Eat" the busy signal event, engage throttle, and continue the operation
 			GBT.nThrottleTimer = 1
+		
+			-- Recalculate module status before proceeding
+			GuildBankTools.tModules.Stack:IdentifyStackableItems()
+			GuildBankTools.tModules.Sort:CalculateSortedList()
+			
 			GBT:ExecuteThrottledOperation(eModuleInProgress)		
 		else
 			-- Something else did this, pass the signal on to GuildAlerts
@@ -140,10 +144,16 @@ function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResu
 	end
 end
 
-function GuildBankTools:OnGuildResult(guildSender, strName, nRank, eResult)
-	if eResult == GuildLib.GuildResult_Busy and GuildBankTools:GetInProgressModule() ~= nil then
+function GuildBankTools:OnGuildResult(guildSender, strName, nRank, eResult)	
+	local eInProgress = GuildBankTools:GetInProgressModule()
+	if eResult == GuildLib.GuildResult_Busy and eInProgress ~= nil then
 		GuildBankTools.nThrottleTimer = 1
-		GuildBankTools:ExecuteThrottledOperation(eModuleInProgress)		
+		
+		-- Recalculate module status before proceeding
+		GuildBankTools.tModules.Stack:IdentifyStackableItems()
+		GuildBankTools.tModules.Sort:CalculateSortedList()
+		
+		GuildBankTools:ExecuteThrottledOperation(eInProgress)		
 	end
 end
 
@@ -291,6 +301,7 @@ function GuildBankTools:StartModule(eModule)
 	end
 	
 	-- Call the async :Execute() operation for this module
+	self.nThrottleTimer = 0
 	self:ExecuteThrottledOperation(eModule)
 end
 
@@ -308,11 +319,11 @@ end
 
 
 function GuildBankTools:ExecuteThrottledOperation(eModule)
-	-- Start timer
+	-- Start timer	
 	self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Execute", self.tModules[eModule])
 	
-	-- Decrease throttled delay by 0.25 sec for next pass
-	self.nThrottleTimer = self.nThrottleTimer > 0 and self.nThrottleTimer-0.25 or 0
+	-- Slowly ease up on the throttle
+	self.nThrottleTimer = self.nThrottleTimer > 0.05 and self.nThrottleTimer-0.05 or 0
 end
 
 
@@ -394,5 +405,5 @@ end
 
 
 -- Standard addon initialization
-GuildBankToolsInst = GuildBankTools:new()
-GuildBankToolsInst:Init()
+GuildBankTools = GuildBankTools:new()
+GuildBankTools:Init()
