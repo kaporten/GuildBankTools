@@ -109,6 +109,11 @@ end
 function Stack:HighlightStackables()
 	-- Build lookuptable of all stackable indices. Key=bank slot index, Value=true (value not used).
 	local tStackableSlotIdx = {}
+	
+	if self.tStackable == nil then
+		return
+	end
+	
 	for _,tStackableItem in ipairs(self.tStackable) do
 		for _,tSlot in ipairs(tStackableItem) do
 			tStackableSlotIdx[tSlot.nIndex] = true
