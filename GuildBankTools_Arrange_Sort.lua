@@ -1,8 +1,13 @@
-
-local GuildBankTools = Apollo.GetAddon("GuildBankTools")
-local GB = Apollo.GetAddon("GuildBank")
+--[[
+	Arrange:Sort module.
+--]]
 
 local Sort = {}
+local GBT = Apollo.GetAddon("GuildBankTools")
+
+function Sort:Initialize()
+	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
+end
 
 function Sort.Comparator_Family(tSlotA, tSlotB)
 	-- Family (Crafting, Schematic etc)
@@ -224,11 +229,47 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 	end
 end
 
-function Sort:CalculateSortedList()
-	local tTabContent = GuildBankTools:GetCurrentTabSlots()
+function Sort:HasPendingOperations()
+	return self:GetPendingOperationCount() > 0
+end
+
+function Sort:GetPendingOperationCount()
+	local tCurrentSlots = GBT:GetBankTab()
+	
+	-- Run through list of sorted items, compare sorted with current ItemId for each slot	
+	-- For speed, first build map of current slot idx -> itemId
+	local tCurrentItemIds = {}
+	for _,tSlot in ipairs(tCurrentSlots) do
+		tCurrentItemIds[tSlot.nIndex] = tSlot.itemInSlot:GetItemId()
+	end
+	
+	local nPending = 0
+	
+	-- Check if all slots match
+	for _,tSortedSlot in ipairs(self.tSortedSlots) do
+		if tSortedSlot.bIsBlank then
+			-- Blank sorted slot should not match any current slot
+			if tCurrentItemIds[tSortedSlot.nIndex] ~= nil then
+				nPending = nPending + 1
+			end
+		else
+			-- Non-blank sorted slot should have identical itemId in current slot
+			local itemId = tSortedSlot.itemInSlot:GetItemId()
+			if tCurrentItemIds[tSortedSlot.nIndex] ~= itemId then
+				nPending = nPending + 1
+			end
+		end
+	end
+		
+	return nPending
+end
+
+function Sort:DeterminePendingOperations()
+	Print("Sort:DeterminePendingOperations")
+	local tTabContent = GBT:GetBankTab()
 	table.sort(tTabContent, Sort.SlotSortOrderComparator)
 	
-	Sort:DistributeBlanksSingle(tTabContent, GuildBankTools:GetCurrentTabSize())
+	Sort:DistributeBlanksSingle(tTabContent, GBT:GetBankTabSlots())
 
 	-- After distributing spaces, realign indices on all contained slots' .nIndex with new sorted-index
 	for newIndex,entry in ipairs(tTabContent) do
@@ -274,7 +315,7 @@ end
 function Sort:Execute()	
 	
 	-- All current bank slots, prior to sort operation
-	local tCurrentSlots = GuildBankTools.guildOwner:GetBankTab(GuildBankTools.nCurrentTab)
+	local tCurrentSlots = GBT:GetBankTab()
 	
 	-- Loop through sorted list of bank-slots, process first slot with incorrect item (by id) in it
 	for idx,tSortedTargetSlot in ipairs(self.tSortedSlots) do
@@ -300,13 +341,13 @@ function Sort:Execute()
 				-- Expected events to process before triggering next move depends on swap or move.
 				if bIsSwap == true then
 					-- Swap fires bRemoved=true|false events for both slots
-					GuildBankTools:SetPendingEvents(GuildBankTools.enumModules.Sort, {
+					self.Controller:SetPendingEvents(self.Controller.enumModules.Sort, {
 						[tSortedTargetSlot.nIndex] = {true, false}, 
 						[tSourceSlot.nIndex] = {true, false}
 					})
 				else				
 					-- Move fires bRemoved=true for source, bRemoved=false for target
-					GuildBankTools:SetPendingEvents(GuildBankTools.enumModules.Sort, {
+					self.Controller:SetPendingEvents(self.Controller.enumModules.Sort, {
 						[tSortedTargetSlot.nIndex] = {false}, 
 						[tSourceSlot.nIndex] = {true}
 					})
@@ -315,6 +356,7 @@ function Sort:Execute()
 				--Print(string.format("Moving [nTargetIdx=%d]:(InventoryId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetInventoryId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
 
 				-- Pulse both source and target
+				local GB = Apollo.GetAddon("GuildBank")
 				if GB ~= nil then
 					local bankwnds = GB.tWndRefs.tBankItemSlots
 					bankwnds[tSourceSlot.nIndex]:TransitionPulse()
@@ -322,10 +364,10 @@ function Sort:Execute()
 				end	
 				
 				-- Fire off the update by beginning and ending the bank transfer from source to target.
-				GuildBankTools.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
+				GBT.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
 				
 				-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
-				GuildBankTools.guildOwner:EndBankItemTransfer(GuildBankTools.nCurrentTab, tSortedTargetSlot.nIndex) 
+				GBT.guildOwner:EndBankItemTransfer(GBT.nCurrentTab, tSortedTargetSlot.nIndex) 
 				
 				return
 			end
@@ -333,11 +375,11 @@ function Sort:Execute()
 	end
 	
 	-- Nothing moved in for-loop, guess we're all done sorting	
-	GuildBankTools:StopModule(GuildBankTools.enumModules.Sort)
+	self.Controller:StopModule(self.Controller.enumModules.Sort)
 end
 
 function Sort:IsEverythingSorted()
-	local tCurrentSlots = GuildBankTools:GetCurrentTabSlots()
+	local tCurrentSlots = GBT:GetBankTab()
 	
 	-- Run through list of sorted items, compare sorted with current ItemId for each slot	
 	-- For speed, first build map of current slot idx -> itemId
@@ -366,25 +408,26 @@ function Sort:IsEverythingSorted()
 end
 
 
-function Sort:Enable(bInProgress)
-	local text = bInProgress and "..." or "Sort"
-
-	-- Enable button?
-	local bEnable = bInProgress or not self:IsEverythingSorted()
-	
-	-- Update button
-	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
+function Sort:Enable()
+	local wndButton = Apollo.GetAddon("GuildBankTools"):GetToolbarForm():FindChild("SortButton")
 	if wndButton ~= nil then
-		wndButton:Enable(bEnable)
-		wndButton:SetText(text)
+		wndButton:SetText("Sort")
+		wndButton:Enable(true)
 	end	
 end
 
 function Sort:Disable()
-	local wndButton = GuildBankTools.wndOverlayForm:FindChild("SortButton")
+	local wndButton = Apollo.GetAddon("GuildBankTools"):GetToolbarForm():FindChild("SortButton")
 	if wndButton ~= nil then
-		wndButton:Enable(false)
 		wndButton:SetText("Sort")
+		wndButton:Enable(false)
+	end	
+end
+
+function Sort:SetProgress(nRemaining, nTotal)
+	local wndButton = Apollo.GetAddon("GuildBankTools"):GetToolbarForm():FindChild("SortButton")
+	if wndButton ~= nil then
+		wndButton:SetText(self:GetPendingOperationCount())
 	end	
 end
 
@@ -392,21 +435,14 @@ end
 	--[[ Button events --]]
 
 	-- TODO: Load/handle compartmentalized sort-form from this file
-function GuildBankTools:OnSortButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
-	if GuildBankTools:IsInProgress(GuildBankTools.enumModules.Sort) then
-		GuildBankTools:StopModule(GuildBankTools.enumModules.Sort)
+function GBT:OnSortButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
+	local controllerArrange = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
+	if controllerArrange:GetInProgressModule() ~= nil then
+		controllerArrange:StopModule(controllerArrange.enumModules.Sort)
 	else
-		GuildBankTools:StartModule(GuildBankTools.enumModules.Sort)
-	end
+		controllerArrange:StartModule(controllerArrange.enumModules.Sort)
+	end	
 end
 
-function GuildBankTools:OnSortButton_MouseEnter(wndHandler, wndControl, x, y)
-	
---	Print("OnSortButton_MouseEnter")
-end
 
-function GuildBankTools:OnSortButton_MouseExit(wndHandler, wndControl, x, y)
---	Print("OnSortButton_MouseExit")	
-end
-
-Apollo.RegisterPackage(Sort, "GuildBankTools:Sort", 1, {}) 
+Apollo.RegisterPackage(Sort, "GuildBankTools:Module:Arrange:Sort", 1, {}) 

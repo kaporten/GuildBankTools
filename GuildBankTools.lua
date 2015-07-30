@@ -6,8 +6,11 @@
 require "Apollo"
 require "Window"
 
+
+	--[[ Globals and enums --]]
+
 -- Addon class itself
-local Major, Minor, Patch = 3, 0, 2
+local Major, Minor, Patch = 3, 1, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -19,11 +22,13 @@ GuildBankTools.enumOpacity = {
 	Visible = 1
 }
 
--- Enum of modules to load. Each module is expected to conform to the same interface (Enable, Disable, Execute
-GuildBankTools.enumModules = {
-	Stack = "Stack",
-	Sort = "Sort",
-}	
+GuildBankTools.enumModuleTypes = {
+	Arrange = "Arrange",
+	Filter = "Filter",
+}
+
+
+	--[[ Addon initialization --]]
 
 function GuildBankTools:new(o)
 	o = o or {}
@@ -42,25 +47,26 @@ function GuildBankTools:Init()
 	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
 end
 
+function GuildBankTools:OnDependencyError(strDep, strErr)
+	-- GuildAlerts is optional (optionally used by Arrange-modules)
+	if strDep == "GuildAlerts" then
+		return true
+	end	
+	
+	-- All other missing dependencies (ie., just "GuildBank") should cause the addon to fail loading
+	return false
+end
+
+-- Addon being loaded
 function GuildBankTools:OnLoad()
-	-- Load sub-modules
-	self.tModules = {}
-	for m,_ in pairs(GuildBankTools.enumModules) do
-		self.tModules[m] = Apollo.GetPackage("GuildBankTools:" .. m).tPackage
-	end
 	
 	-- Ensure tSettings table always exist, even if there are no saved settings
 	self.tSettings = self.tSettings or {}
-		
-	-- Initially, no operations are in progress. Explicitly register "false" for all.
-	self.tInProgress = {}
-	for e,_ in pairs(GuildBankTools.enumModules) do
-		self.tInProgress[e] = false
-	end
 
 	-- Store ref for Guild Bank
 	GB = Apollo.GetAddon("GuildBank")	
 	if GB == nil then
+		-- GuildBank missing should've triggered a dependency error, but it doesn't hurt to check again
 		Print("GuildBankTools startup aborted: required addon 'GuildBank' not found!")
 		return
 	end
@@ -69,41 +75,69 @@ function GuildBankTools:OnLoad()
 	Apollo.RegisterEventHandler("GuildBankTab", "OnGuildBankTab", self) -- Guild bank tab opened/changed.
 	Apollo.RegisterEventHandler("GuildBankItem", "OnGuildBankItem", self) -- Guild bank tab contents changed.
 
-	-- Load form for later use
+	-- Load main form for later use (forms are created when GuildBank is opened)
 	self.xmlDoc = XmlDoc.CreateFromFile("GuildBankTools.xml")
 	
 	-- Hook into GuildBank to react to main-tab changes (not bank-vault tab changes, but f.ex. changing to the Money or Log tab)
 	self.Orig_GB_OnBankTabUncheck = GB.OnBankTabUncheck
 	GB.OnBankTabUncheck = self.Hook_GB_OnBankTabUncheck	
 	
-	-- Hook into GuildAlerts to suppress the "guild bank busy" log message / throttle speed when it occurs
-	local GA = Apollo.GetAddon("GuildAlerts")
-	if GA ~= nil then
-		self.Orig_GA_OnGuildResult = GA.OnGuildResult
-		GA.OnGuildResult = self.Hook_GA_OnGuildResult	
-	else
-		Apollo.RegisterEventHandler("GuildResult", "OnGuildResult", self) 
-	end
-	
 	-- Register with addon "OneVersion"
 	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
 end
 
-function GuildBankTools:OnDependencyError(strDep, strErr)
-	-- GuildAlerts is optional
-	if strDep == "GuildAlerts" then
-		return true
+
+	--[[ Guild bank tab change hooks --]]
+
+-- Individual Bank tab selected
+function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
+	Print("OnGuildBankTab:" .. nTab)
+	-- Store refs to currently selected guild and tab
+	self.guildOwner = guildOwner
+	self.nCurrentTab = nTab
+
+	-- First-hit form loading when the Bank tab is shown
+	local bIsFormLoaded = self.wndOverlayForm ~= nil and GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") ~= nil
+	if not bIsFormLoaded and self.xmlDoc ~= nil then	
+		-- Load overlayform with GuildBank's "wndMain" as parent window, and self as owner (event recipient)
+		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, self)					
+		
+		-- Load and initialize all modules
+		if self.tModuleControllers == nil then
+			self.tModuleControllers = {}
+			for m,_ in pairs(self.enumModuleTypes) do
+				-- Load and initialize module control
+				self.tModuleControllers[m] = Apollo.GetPackage("GuildBankTools:Controller:" .. m).tPackage
+				self.tModuleControllers[m]:LoadForms()
+				self.tModuleControllers[m]:Initialize()
+			end
+		end
+	end
+		
+	-- Stop any in-progress modules, and update their status
+	for eModuleType, controller in pairs(self.tModuleControllers) do
+		controller:StopModules()
+		controller:UpdateModules()
 	end	
-	return false
 end
 
-function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)	
+-- Top Guild tab changes, eg. Money/Bank/Bank Permissions/Bank Management/Log.
+-- Hooked so that toolbar can be hidden when moving away from the Bank tab
+function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)
+	Print("Hook_OnBankTabUncheck")
 	-- NB: In this hooked context "self" is GuildBank, not GuildBankTools, so grab a ref to GuildBankTools
 	local GBT = Apollo.GetAddon("GuildBankTools")
-	
+
 	-- First, let GuildBank handle the call fully
 	GBT.Orig_GB_OnBankTabUncheck(GB, wndHandler, wndControl)
 	
+	-- Stop any running modules
+	if GBT.tModuleControllers ~= nil then
+		for eModuleType, controller in pairs(GBT.tModuleControllers) do
+			controller:StopModules()
+		end
+	end
+		
 	-- Then, determine if the toolbar should be shown or hidden
 	if GBT.wndOverlayForm ~= nil then
 		-- If UN-checked tab is the bank vault tab, hide the toolbar
@@ -115,105 +149,9 @@ function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)
 	end
 end
 
-function GuildBankTools:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResult)	
-	-- NB: In this hooked context "self" is GuildAlerts, not GuildBankTools, so grab a ref to GuildBankTools
-	local GBT = Apollo.GetAddon("GuildBankTools")	
-	
-	if eResult ~= GuildLib.GuildResult_Busy then
-		-- Not the busy-signal, just let GuildAlerts handle whatever it is as usual
-		GBT.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
-	else
-		-- Bank complains that it's busy (due to sort/stack spam)
-		-- Is it me spamming? (is there an in-progress operation?)
-		local eModuleInProgress = GBT:GetInProgressModule()
-	
-		if eModuleInProgress ~= nil then		
-			-- Yep, GuildBankTools is spamming
-			-- "Eat" the busy signal event, engage throttle, and continue the operation
-			GBT.nThrottleTimer = 1
-		
-			-- Recalculate module status before proceeding
-			GuildBankTools.tModules.Stack:IdentifyStackableItems()
-			GuildBankTools.tModules.Sort:CalculateSortedList()
-			
-			GBT:ExecuteThrottledOperation(eModuleInProgress)		
-		else
-			-- Something else did this, pass the signal on to GuildAlerts
-			GBT.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
-		end
-	end
-end
 
-function GuildBankTools:OnGuildResult(guildSender, strName, nRank, eResult)	
-	local eInProgress = GuildBankTools:GetInProgressModule()
-	if eResult == GuildLib.GuildResult_Busy and eInProgress ~= nil then
-		GuildBankTools.nThrottleTimer = 1
-		
-		-- Recalculate module status before proceeding
-		GuildBankTools.tModules.Stack:IdentifyStackableItems()
-		GuildBankTools.tModules.Sort:CalculateSortedList()
-		
-		GuildBankTools:ExecuteThrottledOperation(eInProgress)		
-	end
-end
-
--- Whenever bank tab is changed, interrupt stacking (if it is in progress) and calc stackability
-function GuildBankTools:OnGuildBankTab(guildOwner, nTab)	
-	-- First-hit form loading when the items (vault) tab is shown	
-	if GB ~= nil and self.xmlDoc ~= nil and (self.wndOverlayForm == nil or GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") == nil) then
-		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, self)					
-		
-		-- Restore usable-items-only checkbox to previously saved state from tSettings
-		if self.tSettings.bUsableOnly ~= nil then			
-			self.wndOverlayForm:FindChild("UsableButton"):SetCheck(self.tSettings.bUsableOnly)
-		end
-		
-		-- Load bank-tab highlight forms
-		self.tTabHighlights = {}
-		for n = 1,5 do
-			local wndBankTab = GB.tWndRefs.wndMain:FindChild("BankTabBtn" .. n)
-			self.tTabHighlights[n] = Apollo.LoadForm(self.xmlDoc, "TabHighlightForm", wndBankTab, self)								
-		end
-		
-		-- Localization hack - german/french texts for "Usable items only" are considerbly longer than english ones, so reduce font-size for non-EN
-		if Apollo.GetString(1) ~= "Cancel" then
-			self.wndOverlayForm:FindChild("UsableButtonLabel"):SetFont("CRB_InterfaceTiny_BB")
-		end
-	end
-
-	-- Store refs to current visible tab and guild
-	self.nCurrentTab = nTab
-	self.guildOwner = guildOwner
+	--[[ Item changed in guildbank --]]
 	
-	-- Changed tab, interrupt any in-progress operations
-	local eInProgress = self:GetInProgressModule()
-	if eInProgress ~= nil then 
-		self:StopModule(eInProgress)
-	end
-	
-	-- Initially disable all modules after tab-change (dead buttons)
-	for eModule,module in pairs(self.tModules) do
-		module:Disable()
-	end
-
-	-- Calculate list of stackable & sortable items
-	self.tModules.Stack:IdentifyStackableItems()
-	self.tModules.Sort:CalculateSortedList()
-	
-	-- Re-enable modules (enable buttons)
-	for eModule,module in pairs(self.tModules) do
-		module:Enable(false) -- None are in progress
-	end	
-	
-	-- Then highlight any search criteria matches
-	self:HighlightSearchMatches()
-end
-
-
--- React to bank changes by re-calculating stackability
--- If stacking is in progress, mark progress on the current stacking (pendingStackEvents)
--- Each stacked item will produce 2 GuildBankItem events, and stacking of next item cannot
--- proceed until both events are received.
 function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUpdated, bRemoved)
 	-- Ignore events if toolbar is not visible 
 	-- (don't bother updating if people change stuff while you're not at the bank)
@@ -221,173 +159,85 @@ function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUp
 		return
 	end
 	
-	-- Is any module in progress?
-	local eModuleInProgress = self:GetInProgressModule()
+	-- Shorthands to Arrange/Filter controllers
+	
+	-- Check if any Arrange module is in progress
+	local Arrange = self.tModuleControllers[self.enumModuleTypes.Arrange]
+	local Filter = self.tModuleControllers[self.enumModuleTypes.Filter]
+	
+	local eModuleInProgress = Arrange:GetInProgressModule()
 	
 	if eModuleInProgress == nil then
 		-- User, or some other guildie modified guild bank (since I'm not doing anything... intentionally at least)
-		-- So just recalculate state, modules will be enabled (button updated) after this if/else block
-		self.tModules.Stack:IdentifyStackableItems()
-		self.tModules.Sort:CalculateSortedList()
-		
-		for eModule,module in pairs(self.tModules) do
-			module:Enable(false) 
-		end				
+		-- Stop any in-progress activities, and update all modules
+		for _,controller in pairs(self.tModuleControllers) do
+			controller:StopModules()
+			controller:UpdateModules()
+		end
 	else
+		-- Some Arrange-operation is in progress...
 		-- Remove pending event from list of expected events for in-progress operation
-		local bMatched = self:RemovePendingGuildBankEvent(eModuleInProgress, nInventorySlot, bRemoved)
+		local bMatched = Arrange:RemovePendingEvent(eModuleInProgress, nInventorySlot, bRemoved)
 		
 		if not bMatched then
-			-- Uh-oh... this event was not meant for me. Stop in-progress module then.
-			self:StopModule(eModuleInProgress)
-	
-			-- Re-calculate stack/sort lists
-			self.tModules.Stack:IdentifyStackableItems()
-			self.tModules.Sort:CalculateSortedList()		
+			-- Uh-oh... this event was not meant for me. Stop, drop and roll.
+			for _,controller in pairs(self.tModuleControllers) do
+				controller:StopModules()
+				controller:UpdateModules()
+			end
 		else
 			-- Event was expected. Are we waiting for more events?
-			if self:HasPendingGuildBankEvents(eModuleInProgress) == false then
-				-- All partial events received, recalculate
-				self.tModules.Stack:IdentifyStackableItems()
-				self.tModules.Sort:CalculateSortedList()		
-
-				self:ExecuteThrottledOperation(eModuleInProgress)
-			end
-		end
-		
-		-- Re-enable in-progress module (update button)
-		for eModule,module in pairs(self.tModules) do
-			if eModule == eModuleInProgress then
-				module:Enable(true) 
-			end
-		end			
-	end
-	
-	-- Once all real processing is done, update the filtering if needed
-	self:HighlightSearchMatches()	
-end
-
-
---[[ Control of in-progress operations --]]
-
-
-function GuildBankTools:StopModule(eModule)
-	self.tInProgress[eModule] = false
-	
-	-- When stopping a module, all modules can be enabled again
-	for e,module in pairs(self.tModules) do	
-		module:Enable(false)
-	end	
-end
-
-
-function GuildBankTools:StartModule(eModule)
-	
-	-- When starting a module, all other modules must be stoppend and disabled
-	for e,module in pairs(self.tModules) do	
-		if eModule ~= e then	
-			self:StopModule(e)
-			module:Disable()
-		end
-	end
-
-	self.tInProgress[eModule] = true
-	
-	-- After stopping/disabling everything (else), enable the one which was just started
-	for e,module in pairs(self.tModules) do	
-		if eModule == e then
-			module:Enable(true)
-		end
-	end
-	
-	-- Call the async :Execute() operation for this module
-	self.nThrottleTimer = 0
-	self:ExecuteThrottledOperation(eModule)
-end
-
-function GuildBankTools:GetInProgressModule()
-	for eModule,bInProgress in pairs(self.tInProgress) do
-		if bInProgress then
-			return eModule
-		end
-	end
-end
-
-function GuildBankTools:IsInProgress(eModule)
-	return self:GetInProgressModule() == eModule	
-end
-
-
-function GuildBankTools:ExecuteThrottledOperation(eModule)
-	-- Start timer	
-	self.timerOperation = ApolloTimer.Create(self.nThrottleTimer + 0.0, false, "Execute", self.tModules[eModule])
-	
-	-- Slowly ease up on the throttle
-	self.nThrottleTimer = self.nThrottleTimer > 0.05 and self.nThrottleTimer-0.05 or 0
-end
-
-
-
-
---[[ Control of pending events for asynchronous operation --]]
-
-function GuildBankTools:SetPendingEvents(eModule, tPendingEvents)	
-	self.tPendingEvents = self.tPendingEvents or {}
-	self.tPendingEvents[eModule] = tPendingEvents
-end
-
-function GuildBankTools:RemovePendingGuildBankEvent(eModule, nUpdatedInventorySlot, bRemoved)
-	self.tPendingEvents = self.tPendingEvents or {}
-	self.tPendingEvents[eModule] = self.tPendingEvents[eModule] or {}
-	
-	local tPendingForModule = self.tPendingEvents[eModule]
-	local bMatch = false
-	
-	if tPendingForModule ~= nil and type(tPendingForModule[nUpdatedInventorySlot]) == "table" then
-		local tPending = tPendingForModule[nUpdatedInventorySlot]
-		for i,b in ipairs(tPending) do
-			if b == bRemoved then				
-				table.remove(tPending, i)
-				bMatch = true
-			end
-			
-			if #tPending == 0 then
-				tPendingForModule[nUpdatedInventorySlot] = nil
+			if Arrange:HasPendingEvents(eModuleInProgress) == false then
+				-- Nope, last event for this operation just received
+				
+				-- Update all modules (recalculate stackables/sortables/apply filters etc)
+				for _,controller in pairs(self.tModuleControllers) do
+					controller:UpdateModules()
+				end			
+				
+				-- Schedule next execution
+				Arrange:ScheduleExecution(eModuleInProgress)					
 			end
 		end
 	end
+end
 	
-	return bMatch
+
+	--[[ Utility functions --]]
+
+function GuildBankTools:GetToolbarForm()
+	return self.wndOverlayForm
 end
 
-function GuildBankTools:HasPendingGuildBankEvents(eModule)
-	if self.tPendingEvents == nil or self.tPendingEvents[eModule] == nil then return
-		false
-	end
-	
-	for k,v in pairs(self.tPendingEvents[eModule]) do
-		return true
-	end
-	
-	return false
+-- Gets tab content for specified tab (default to current tab)
+function GuildBankTools:GetBankTab(nTab)
+	return self.guildOwner:GetBankTab(nTab and nTab or self.nCurrentTab)
 end
 
-
-function GuildBankTools:GetCurrentTabSlots()
-	return self.guildOwner:GetBankTab(self.nCurrentTab)
-end
-
-function GuildBankTools:GetCurrentTabSize()
+-- Get number of slots available on each tank tab
+function GuildBankTools:GetBankTabSlots()
 	return self.guildOwner:GetBankTabSlots()
 end
 
+-- Get number of available bank tabs
+function GuildBankTools:GetBankTabCount()
+	return self.guildOwner:GetBankTabCount()
+end
 
---[[ Settings save/restore --]]
+function GuildBankTools:GetCurrentTab()
+	return self.nCurrentTab
+end
+
+
+
+	--[[ Settings save/restore --]]
+	
 -- Save addon config per character. Called by engine when performing a controlled game shutdown.
 function GuildBankTools:OnSave(eType)
 	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
 		return 
 	end
+	
 	
 	-- Simply save the entire tSettings structure
 	return self.tSettings
@@ -405,5 +255,4 @@ end
 
 
 -- Standard addon initialization
-GuildBankTools = GuildBankTools:new()
 GuildBankTools:Init()
