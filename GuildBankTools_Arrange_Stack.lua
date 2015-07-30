@@ -24,7 +24,7 @@ end
 
 -- Scans current guild bank tab, returns list containing list of stackable slots
 function Stack:DeterminePendingOperations()
-	Print("Stack:DeterminePendingOperations")
+	--Print("Stack:DeterminePendingOperations")
 	-- Identify all stackable slots in the current tab, and add to tStackableItems
 	-- This includes stackables with just 1 stack (ie. nothing to stack with)
 	-- tStackableItems is a table with key=itemId, value=list of slots containing this itemId
@@ -65,7 +65,7 @@ end
 -- Sets a flag indicating if further stacking is possible, but takes no further action 
 -- (awaits Event indicating this stacking-operation has fully completed)
 function Stack:Execute()
-	Print("Stack:Execute")
+	--Print("Stack:Execute")
 	-- Safeguard, but should only happen if someone calls :Execute() before opening the guild bank
 	if self.tStackable == nil then
 		self.Controller:StopModule(self.Controller.enumModules.Stack)		
@@ -137,7 +137,8 @@ end
 
 -- When mousing over the button, change bank-slot opacity to identify stackables
 function GBT:OnStackButton_MouseEnter(wndHandler, wndControl, x, y)
-	if wndControl:IsEnabled() then	
+	local controllerArrange = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
+	if controllerArrange:GetInProgressModule() == nil and wndControl:IsEnabled() then	
 		local controllerFilter = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
 		
 		-- Build [idx]->true table for ApplyFilter
@@ -174,7 +175,7 @@ function Stack:Disable()
 	end	
 end
 
-function Stack:SetProgress(nRemaining, nTotal)
+function Stack:UpdateProgress()
 	-- Update button
 	local wndButton = GBT:GetToolbarForm():FindChild("StackButton")
 	if wndButton ~= nil then

@@ -51,7 +51,7 @@ end
 
 
 function Arrange:UpdateModules()
-	Print("UpdateModules")
+	--Print("UpdateModules")
 	for eCurrent,module in pairs(self.tModules) do	
 		
 		local eInProgress = self:GetInProgressModule()
@@ -71,7 +71,7 @@ function Arrange:UpdateModules()
 			if eInProgress == eCurrent then
 				-- This module is in progress, update arrangeables
 				module:DeterminePendingOperations()				
-				module:SetProgress(1, 10)
+				module:UpdateProgress()
 			else
 				-- Some other module is in progress -- keep disabled
 				module:Disable()
@@ -85,7 +85,7 @@ end
 
 
 function Arrange:StartModule(eModule)
-	Print("StartModule(" .. eModule .. ")")
+	--Print("StartModule(" .. eModule .. ")")
 	if self:GetInProgressModule() ~= nil then
 		Print(string.format("WARNING: Attempt to start Arrange-module '%s' while '%s' is already in progress", eModule, self:GetInProgressModule()))
 		return
@@ -102,7 +102,7 @@ function Arrange:StartModule(eModule)
 	self:SetInProgressModule(eModule)
 
 	-- Tell module to update its current progress indicator
-	self.tModules[eModule]:SetProgress(1,10)
+	self.tModules[eModule]:UpdateProgress()
 	
 	-- Module hasn't actually *done* anything yet though... that happens in the schedulled call below
 	self.nThrottleTimer = 0
@@ -110,7 +110,7 @@ function Arrange:StartModule(eModule)
 end
 
 function Arrange:StopModule(eModule)
-	Print("StopModule(" .. eModule .. ")")
+	--Print("StopModule(" .. eModule .. ")")
 	-- Stopping an individual module happens by cancel button-click
 	-- In that case, run the generic stop-all modules and update all modules
 	self:StopModules()
@@ -118,7 +118,7 @@ function Arrange:StopModule(eModule)
 end
 
 function Arrange:StopModules()
-	Print("StopModules")
+	--Print("StopModules")
 	-- Module was asked to stop, either by user input or due to tab-change etc
 	self:ClearInProgressModule()	
 end

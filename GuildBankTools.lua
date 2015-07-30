@@ -91,7 +91,7 @@ end
 
 -- Individual Bank tab selected
 function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
-	Print("OnGuildBankTab:" .. nTab)
+	--Print("OnGuildBankTab:" .. nTab)
 	-- Store refs to currently selected guild and tab
 	self.guildOwner = guildOwner
 	self.nCurrentTab = nTab
@@ -124,7 +124,7 @@ end
 -- Top Guild tab changes, eg. Money/Bank/Bank Permissions/Bank Management/Log.
 -- Hooked so that toolbar can be hidden when moving away from the Bank tab
 function GuildBankTools:Hook_GB_OnBankTabUncheck(wndHandler, wndControl)
-	Print("Hook_OnBankTabUncheck")
+	--Print("Hook_GB_OnBankTabUncheck")
 	-- NB: In this hooked context "self" is GuildBank, not GuildBankTools, so grab a ref to GuildBankTools
 	local GBT = Apollo.GetAddon("GuildBankTools")
 

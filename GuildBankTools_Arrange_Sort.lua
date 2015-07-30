@@ -265,7 +265,7 @@ function Sort:GetPendingOperationCount()
 end
 
 function Sort:DeterminePendingOperations()
-	Print("Sort:DeterminePendingOperations")
+	--Print("Sort:DeterminePendingOperations")
 	local tTabContent = GBT:GetBankTab()
 	table.sort(tTabContent, Sort.SlotSortOrderComparator)
 	
@@ -424,7 +424,7 @@ function Sort:Disable()
 	end	
 end
 
-function Sort:SetProgress(nRemaining, nTotal)
+function Sort:UpdateProgress()
 	local wndButton = Apollo.GetAddon("GuildBankTools"):GetToolbarForm():FindChild("SortButton")
 	if wndButton ~= nil then
 		wndButton:SetText(self:GetPendingOperationCount())
@@ -442,6 +442,52 @@ function GBT:OnSortButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
 	else
 		controllerArrange:StartModule(controllerArrange.enumModules.Sort)
 	end	
+end
+
+-- When mousing over the button, change bank-slot opacity to identify stackables
+function GBT:OnSortButton_MouseEnter(wndHandler, wndControl, x, y)
+	local controllerArrange = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
+	if controllerArrange:GetInProgressModule() == nil and wndControl:IsEnabled() then	
+		local controllerFilter = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
+				
+		-- Build [idx]->true table for ApplyFilter
+		local tByIdx = {}
+		
+		local tCurrentSlots = GBT:GetBankTab()
+		
+		-- Run through list of sorted items, compare sorted with current ItemId for each slot	
+		-- For speed, first build map of current slot idx -> itemId
+		local tCurrentItemIds = {}
+		for _,tSlot in ipairs(tCurrentSlots) do
+			tCurrentItemIds[tSlot.nIndex] = tSlot.itemInSlot:GetItemId()
+		end
+		
+		local nPending = 0
+		
+		-- Check if all slots match
+		for _,tSortedSlot in ipairs(Sort.tSortedSlots) do
+			tByIdx[tSortedSlot.nIndex] = false
+			if tSortedSlot.bIsBlank then
+				-- Blank sorted slot should not match any current slot
+				if tCurrentItemIds[tSortedSlot.nIndex] ~= nil then
+					tByIdx[tSortedSlot.nIndex] = true
+				end
+			else
+				-- Non-blank sorted slot should have identical itemId in current slot
+				local itemId = tSortedSlot.itemInSlot:GetItemId()
+				if tCurrentItemIds[tSortedSlot.nIndex] ~= itemId then
+					tByIdx[tSortedSlot.nIndex] = true
+				end
+			end
+		end		
+		controllerFilter:ApplyFilter(tByIdx)
+	end
+end
+
+-- When no longer hovering over the button, reset opacity for stackables to whatever matches search criteria
+function GBT:OnSortButton_MouseExit(wndHandler, wndControl, x, y)
+	local controllerFilter = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
+	controllerFilter:ApplyFilter()
 end
 
 
