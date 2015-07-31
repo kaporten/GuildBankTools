@@ -98,6 +98,7 @@ function Filter:UpdateModules()
 		-- Show top hit-count indicators
 		self:ShowTabCountIndicators(tTabMatchCounter)
 	else
+		self.tMatches = nil
 		self:ClearFilter()
 		self:HideTabCountIndicators()
 	end
