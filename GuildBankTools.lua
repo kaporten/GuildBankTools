@@ -10,7 +10,7 @@ require "Window"
 	--[[ Globals and enums --]]
 
 -- Addon class itself
-local Major, Minor, Patch = 3, 1, 0
+local Major, Minor, Patch = 3, 1, 1
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
