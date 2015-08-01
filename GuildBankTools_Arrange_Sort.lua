@@ -25,7 +25,8 @@ function Sort:Initialize()
 		self.Comparator_Family,
 		
 		-- May call additional function, if the two items category is found in tComparators_Category
-		self.Comparator_Category, 
+		self.Comparator_Category,
+		self.Comparator_Type,
 		
 		self.Comparator_RequiredLevel,
 		self.Comparator_ItemId,		
@@ -134,7 +135,8 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 				and cur.bIsBlank ~= true -- Never adjacent to existing blanks
 				and nxt.bIsBlank ~= true -- Never adjacent to existing blanks
 				and (cur.itemInSlot:GetItemFamily() ~= nxt.itemInSlot:GetItemFamily() -- When family changes
-				     or cur.itemInSlot:GetItemCategory() ~= nxt.itemInSlot:GetItemCategory()) -- Or when category changes
+				     or cur.itemInSlot:GetItemCategory() ~= nxt.itemInSlot:GetItemCategory() -- Or when category changes
+					 or cur.itemInSlot:GetItemType() ~= nxt.itemInSlot:GetItemType()) -- Or when type changes
 			then				
 				nInsertIndex = idx+1
 				break
@@ -367,6 +369,14 @@ function Sort:Comparator_Category(tSlotA, tSlotB)
 		end
 	end
 end
+
+function Sort:Comparator_Type(tSlotA, tSlotB)
+	-- Family (Crafting, Schematic etc)
+	return self:CompareValues(
+		tSlotA.itemInSlot:GetItemType(), 
+		tSlotB.itemInSlot:GetItemType())
+end
+
 
 function Sort:Comparator_RequiredLevel(tSlotA, tSlotB)
 	local primaryA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary
