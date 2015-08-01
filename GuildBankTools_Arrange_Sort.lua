@@ -5,7 +5,16 @@
 local Sort = {}
 local GBT = Apollo.GetAddon("GuildBankTools")
 
+Sort.enumDirection = {
+	Horzontal = "Horizontal",
+	Vertical = "Vertical",
+}
+
 function Sort:Initialize()
+
+	self.tSettings = self.tSettings or {}
+	self.tSettings.eDirection = self.tSettings.eDirection or self.enumDirection.Horizontal
+
 	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
 
 	-- Sort Comparators, in order-of-execution. 
@@ -30,6 +39,24 @@ function Sort:Initialize()
 		[130] = self.Comparator_Category_SkillAMPs,
 		[135] = self.Comparator_Category_Runes,
 	}	
+	
+	-- Horizontal-to-vertical index translation
+	self.tHorizontalToVertical = {
+	  1,  9, 17, 25, 33, 41, 49, 57, 65, 73, 80, 87,  94, 101, 108, 115, 122,
+	  2, 10, 18, 26, 34, 42, 50, 58, 66, 74, 81, 88,  95, 102, 109, 116, 123,
+	  3, 11, 19, 27, 35, 43, 51, 59, 67, 75, 82, 89,  96, 103, 110, 117, 124,
+	  4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 83, 90,  97, 104, 111, 118, 125,
+	  5, 13, 21, 29, 37, 45, 53, 61, 69, 77, 84, 91,  98, 105, 112, 119, 126,
+	  6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 85, 92,  99, 106, 113, 120, 127,
+	  7, 15, 23, 31, 39, 47, 55, 63, 71, 79, 86, 93, 100, 107, 114, 121, 128,
+	  8, 16, 24, 32, 40, 48, 56, 64, 72
+	}
+	
+	self.tVerticalToHorizontal = {}
+	for hor,vert in ipairs(self.tHorizontalToVertical) do
+		self.tVerticalToHorizontal[vert] = hor
+	end
+	
 end
 
 
@@ -40,12 +67,12 @@ function Sort:HasPendingOperations()
 end
 
 function Sort:GetPendingOperationCount()
-	local tCurrentSlots = GBT:GetBankTab()
+	local tCurrentSlots = self:GetBankTabVirtual()
 	
 	-- Run through list of sorted items, compare sorted with current ItemId for each slot	
 	-- For speed, first build map of current slot idx -> itemId
 	local tCurrentItemIds = {}
-	for _,tSlot in ipairs(tCurrentSlots) do
+	for _,tSlot in pairs(tCurrentSlots) do
 		tCurrentItemIds[tSlot.nIndex] = tSlot.itemInSlot:GetItemId()
 	end
 	
@@ -72,18 +99,18 @@ end
 
 function Sort:DeterminePendingOperations()
 	--Print("Sort:DeterminePendingOperations")
-	local tTabContent = GBT:GetBankTab()
-	table.sort(tTabContent, Sort.TableSortComparator)
+	local tCurrent = self:GetBankTabVirtual()
+	table.sort(tCurrent, Sort.TableSortComparator)
 	
-	Sort:DistributeBlanksSingle(tTabContent, GBT:GetBankTabSlots())
+	Sort:DistributeBlanksSingle(tCurrent, GBT:GetBankTabSlots())
 
 	-- After distributing spaces, realign indices on all contained slots' .nIndex with new sorted-index
-	for newIndex,entry in ipairs(tTabContent) do
+	for newIndex,entry in pairs(tCurrent) do		
 		entry.nIndex = newIndex
 	end
 	
 	-- Store result in self-variable
-	self.tSortedSlots = tTabContent
+	self.tSortedSlots = tCurrent
 end
 
 function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
@@ -138,7 +165,7 @@ end
 function Sort:Execute()	
 	
 	-- All current bank slots, prior to sort operation
-	local tCurrentSlots = GBT:GetBankTab()
+	local tCurrentSlots = self:GetBankTabVirtual()
 	
 	-- Loop through sorted list of bank-slots, process first slot with incorrect item (by id) in it
 	for idx,tSortedTargetSlot in ipairs(self.tSortedSlots) do
@@ -165,32 +192,33 @@ function Sort:Execute()
 				if bIsSwap == true then
 					-- Swap fires bRemoved=true|false events for both slots
 					self.Controller:SetPendingEvents(self.Controller.enumModules.Sort, {
-						[tSortedTargetSlot.nIndex] = {true, false}, 
-						[tSourceSlot.nIndex] = {true, false}
+						[self:GetRealIndex(tSortedTargetSlot.nIndex)] = {true, false}, 
+						[self:GetRealIndex(tSourceSlot.nIndex)] = {true, false}
 					})
 				else				
 					-- Move fires bRemoved=true for source, bRemoved=false for target
 					self.Controller:SetPendingEvents(self.Controller.enumModules.Sort, {
-						[tSortedTargetSlot.nIndex] = {false}, 
-						[tSourceSlot.nIndex] = {true}
+						[self:GetRealIndex(tSortedTargetSlot.nIndex)] = {false}, 
+						[self:GetRealIndex(tSourceSlot.nIndex)] = {true}
 					})
 				end
 				
-				--Print(string.format("Moving [nTargetIdx=%d]:(InventoryId=%d, name='%s') to index [%d]", tSourceSlot.nIndex, tSourceSlot.itemInSlot:GetInventoryId(), tSourceSlot.itemInSlot:GetName(), tSortedTargetSlot.nIndex))
+				--Print(string.format("Moving '%s' from index [%d] to [%d]",  tSourceSlot.itemInSlot:GetName(), self:GetRealIndex(tSourceSlot.nIndex), self:GetRealIndex(tSortedTargetSlot.nIndex)))
 
 				-- Pulse both source and target
 				local GB = Apollo.GetAddon("GuildBank")
 				if GB ~= nil then
 					local bankwnds = GB.tWndRefs.tBankItemSlots
-					bankwnds[tSourceSlot.nIndex]:TransitionPulse()
-					bankwnds[tSortedTargetSlot.nIndex]:TransitionPulse()
+					bankwnds[self:GetRealIndex(tSourceSlot.nIndex)]:TransitionPulse()
+					bankwnds[self:GetRealIndex(tSortedTargetSlot.nIndex)]:TransitionPulse()
 				end	
 				
 				-- Fire off the update by beginning and ending the bank transfer from source to target.
+				tSourceSlot.nIndex = self:GetRealIndex(tSourceSlot.nIndex)
 				GBT.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())
 				
 				-- Will trigger OnGuildBankItem x2, one for target (items picked up), one for target (items deposited)
-				GBT.guildOwner:EndBankItemTransfer(GBT.nCurrentTab, tSortedTargetSlot.nIndex) 
+				GBT.guildOwner:EndBankItemTransfer(GBT.nCurrentTab, self:GetRealIndex(tSortedTargetSlot.nIndex))
 				
 				return
 			end
@@ -394,6 +422,41 @@ function Sort:Comparator_Category_Runes(tSlotA, tSlotB)
 end
 
 
+	--[[ Vertical / horizontal index translation --]]
+	
+function Sort:GetVirtualIndex(nRealIndex)
+	if self.tSettings.eDirection == self.enumDirection.Vertical then
+		return self.tHorizontalToVertical[nRealIndex]
+	else
+		return nRealIndex
+	end
+end
+
+function Sort:GetRealIndex(nVirtualIndex)
+	if self.tSettings.eDirection == self.enumDirection.Vertical then
+		return self.tVerticalToHorizontal[nVirtualIndex]
+	else
+		return nVirtualIndex
+	end	
+end
+
+function Sort:GetBankTabVirtual()	
+	local tCurrent = GBT:GetBankTab()
+	
+	if self.tSettings.eDirection == self.enumDirection.Vertical then
+		local tRemapped = {}
+		for idx,tSlot in pairs(tCurrent) do
+			tSlot.nIndex = self:GetVirtualIndex(tSlot.nIndex)
+			tRemapped[#tRemapped+1] = tSlot
+
+		end
+		return tRemapped
+	else
+		-- Horizontal (default layout)
+		return tCurrent
+	end
+end
+
 	--[[ Button events --]]
 
 function GBT:OnSortButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
@@ -428,7 +491,7 @@ function GBT:OnSortButton_MouseEnter(wndHandler, wndControl, x, y)
 			-- and thus DOES NOT match the "highlight sortable" filter we're building
 			tByIdx[i] = false
 			
-			local tSortedSlot = Sort.tSortedSlots[i]
+			local tSortedSlot = Sort.tSortedSlots[Sort:GetVirtualIndex(i)]
 			if tSortedSlot == nil or tSortedSlot.bIsBlank then
 				-- Blank sorted slot should not match any current slot
 				if tCurrentItemIds[i] ~= nil then
