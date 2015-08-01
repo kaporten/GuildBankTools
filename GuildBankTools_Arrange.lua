@@ -140,9 +140,8 @@ function Arrange:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResult)
 			-- "Eat" the busy signal event, engage throttle, and continue the operation
 			Arrange.nThrottleTimer = 1
 		
-			-- Recalculate module status before proceeding (only update for in-progress module to save time)
-			Arrange:UpdateModules(eModuleInProgress)
-			
+			-- Recalculate module status, then schedule next execution
+			Arrange:UpdateModules()
 			Arrange:ScheduleExecution(eModuleInProgress)		
 		else
 			-- Something else did this, pass the signal on to GuildAlerts
@@ -156,17 +155,11 @@ function Arrange:OnGuildResult(guildSender, strName, nRank, eResult)
 	if eResult == GuildLib.GuildResult_Busy and eInProgress ~= nil then
 		Arrange.nThrottleTimer = 1
 		
-		-- Recalculate module status before proceeding
-		Arrange.tModules.Stack:IdentifyStackableItems()
-		Arrange.tModules.Sort:CalculateSortedList()
-		
+		-- Recalculate module status, then schedule next execution
+		Arrange:UpdateModules()		
 		Arrange:ScheduleExecution(eInProgress)		
 	end
 end
-
-
-
-
 
 
 --[[ Event-based module execution --]]
