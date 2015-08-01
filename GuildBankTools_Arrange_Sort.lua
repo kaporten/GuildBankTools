@@ -11,7 +11,7 @@ Sort.enumDirection = {
 }
 
 function Sort:Initialize()
-
+	-- Settings... no way to modify them yet, just use a default sort-direction=Horizontal
 	self.tSettings = self.tSettings or {}
 	self.tSettings.eDirection = self.tSettings.eDirection or self.enumDirection.Horizontal
 
@@ -43,21 +43,21 @@ function Sort:Initialize()
 	
 	-- Horizontal-to-vertical index translation
 	self.tHorizontalToVertical = {
-	  1,  9, 17, 25, 33, 41, 49, 57, 65, 73, 80, 87,  94, 101, 108, 115, 122,
-	  2, 10, 18, 26, 34, 42, 50, 58, 66, 74, 81, 88,  95, 102, 109, 116, 123,
-	  3, 11, 19, 27, 35, 43, 51, 59, 67, 75, 82, 89,  96, 103, 110, 117, 124,
-	  4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 83, 90,  97, 104, 111, 118, 125,
-	  5, 13, 21, 29, 37, 45, 53, 61, 69, 77, 84, 91,  98, 105, 112, 119, 126,
-	  6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 85, 92,  99, 106, 113, 120, 127,
-	  7, 15, 23, 31, 39, 47, 55, 63, 71, 79, 86, 93, 100, 107, 114, 121, 128,
-	  8, 16, 24, 32, 40, 48, 56, 64, 72
+		1,  9, 17, 25, 33, 41, 49, 57, 65, 73, 80, 87,  94, 101, 108, 115, 122,
+		2, 10, 18, 26, 34, 42, 50, 58, 66, 74, 81, 88,  95, 102, 109, 116, 123,
+		3, 11, 19, 27, 35, 43, 51, 59, 67, 75, 82, 89,  96, 103, 110, 117, 124,
+		4, 12, 20, 28, 36, 44, 52, 60, 68, 76, 83, 90,  97, 104, 111, 118, 125,
+		5, 13, 21, 29, 37, 45, 53, 61, 69, 77, 84, 91,  98, 105, 112, 119, 126,
+		6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 85, 92,  99, 106, 113, 120, 127,
+		7, 15, 23, 31, 39, 47, 55, 63, 71, 79, 86, 93, 100, 107, 114, 121, 128,
+		8, 16, 24, 32, 40, 48, 56, 64, 72
 	}
 	
+	-- ... and the other way around
 	self.tVerticalToHorizontal = {}
 	for hor,vert in ipairs(self.tHorizontalToVertical) do
 		self.tVerticalToHorizontal[vert] = hor
-	end
-	
+	end	
 end
 
 
@@ -102,8 +102,13 @@ function Sort:DeterminePendingOperations()
 	--Print("Sort:DeterminePendingOperations")
 	local tCurrent = self:GetBankTabVirtual()
 	table.sort(tCurrent, Sort.TableSortComparator)
-	
-	Sort:DistributeBlanksSingle(tCurrent, GBT:GetBankTabSlots())
+
+	-- Insert first between Family, then Category, then Type until we run out of blanks
+	fInsertionComparators = {Sort.Comparator_Family, Sort.Comparator_Category, Sort.Comparator_Type}
+	for i,f in ipairs(fInsertionComparators) do
+		local blanks = nil
+		blanks = Sort:DistributeBlanksSingle(tCurrent, GBT:GetBankTabSlots(), f, blanks) 
+	end	
 
 	-- After distributing spaces, realign indices on all contained slots' .nIndex with new sorted-index
 	for newIndex,entry in pairs(tCurrent) do		
@@ -114,10 +119,10 @@ function Sort:DeterminePendingOperations()
 	self.tSortedSlots = tCurrent
 end
 
-function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
+function Sort:DistributeBlanksSingle(tEntries, nBankSlots, fComparator, nBlanks)
 	-- How many blank slots are there?
-	local nBlanks = nBankSlots-#tEntries
-
+	nBlanks = nBlanks or nBankSlots-#tEntries	
+	
 	-- No blank spaces to distribute? Then do nothing
 	if nBlanks <= 0 then
 		return 
@@ -134,9 +139,7 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 			if	nxt ~= nil 								
 				and cur.bIsBlank ~= true -- Never adjacent to existing blanks
 				and nxt.bIsBlank ~= true -- Never adjacent to existing blanks
-				and (cur.itemInSlot:GetItemFamily() ~= nxt.itemInSlot:GetItemFamily() -- When family changes
-				     or cur.itemInSlot:GetItemCategory() ~= nxt.itemInSlot:GetItemCategory() -- Or when category changes
-					 or cur.itemInSlot:GetItemType() ~= nxt.itemInSlot:GetItemType()) -- Or when type changes
+				and fComparator(Sort, cur, nxt) ~= nil -- Comparator think's the items are different
 			then				
 				nInsertIndex = idx+1
 				break
@@ -155,11 +158,6 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots)
 			-- No appropriate insertion point found, break outer loop by setting blanks left to 0
 			nBlanks = 0
 		end
-	end
-	
-	-- Realign indices on all slots with new actual index
-	for newIndex,entry in ipairs(tEntries) do
-		entry.nIndex = newIndex
 	end
 end
 
