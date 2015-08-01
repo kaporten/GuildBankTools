@@ -29,6 +29,10 @@ function Sort:Initialize()
 		self.Comparator_Type,
 		
 		self.Comparator_RequiredLevel,
+		self.Comparator_Quality,
+		self.Comparator_Name,
+		
+		-- Fallbacks to ensure unique sorting options
 		self.Comparator_ItemId,		
 		self.Comparator_CurrentIndex,
 	}
@@ -397,6 +401,12 @@ function Sort:Comparator_Name(tSlotA, tSlotB)
 	return Sort:CompareValues(
 		tSlotA.itemInSlot:GetName(), 
 		tSlotB.itemInSlot:GetName())
+end
+
+function Sort:Comparator_Quality(tSlotA, tSlotB)
+	return Sort:CompareValues(
+		tSlotA.itemInSlot:GetItemQuality(), 
+		tSlotB.itemInSlot:GetItemQuality())
 end
 
 function Sort:Comparator_ItemId(tSlotA, tSlotB)
