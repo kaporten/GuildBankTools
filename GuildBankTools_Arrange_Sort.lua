@@ -6,7 +6,7 @@ local Sort = {}
 local GBT = Apollo.GetAddon("GuildBankTools")
 
 Sort.enumDirection = {
-	Horzontal = "Horizontal",
+	Horizontal = "Horizontal",
 	Vertical = "Vertical",
 }
 
@@ -55,17 +55,34 @@ function Sort:Initialize()
 		6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 85, 92,  99, 106, 113, 120, 127,
 		7, 15, 23, 31, 39, 47, 55, 63, 71, 79, 86, 93, 100, 107, 114, 121, 128,
 		8, 16, 24, 32, 40, 48, 56, 64, 72
-	}
+	}	
 	
 	-- ... and the other way around
 	self.tVerticalToHorizontal = {}
 	for hor,vert in ipairs(self.tHorizontalToVertical) do
 		self.tVerticalToHorizontal[vert] = hor
 	end	
+	
+	-- First slots in a row, for both horizontal and vertical layout
+	self.tFirstSlots = {}
+	self.tFirstSlots[self.enumDirection.Horizontal] = {}
+	self.tFirstSlots[self.enumDirection.Vertical] = {}
+	for _,idx in ipairs({1, 18, 35, 52, 69, 86, 103, 120}) do
+		self.tFirstSlots[self.enumDirection.Horizontal][idx] = true
+	end
+	for _,idx in ipairs({1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 80, 87,  94, 101, 108, 115, 122}) do
+		self.tFirstSlots[self.enumDirection.Vertical][idx] = true
+	end
 end
 
 function Sort:SetSettings(tSettings)
+	--Print("Sort:SetSettings())")
 	self.tSettings = tSettings
+	
+	-- Default values for unspecified settings
+	if self.tSettings.eDirection == nil then
+		self.tSettings.eDirection = self.enumDirection.Horizontal
+	end
 end
 
 
@@ -127,6 +144,11 @@ function Sort:DeterminePendingOperations()
 	self.tSortedSlots = tCurrent
 end
 
+function Sort:RedeterminePendingInProgress()
+	-- Do nothing, no need to re-calc while in progress
+end
+
+
 function Sort:DistributeBlanksSingle(tEntries, nBankSlots, fComparator, nBlanks)
 	-- How many blank slots are there?
 	nBlanks = nBlanks or nBankSlots-#tEntries	
@@ -147,6 +169,7 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots, fComparator, nBlanks)
 			if	nxt ~= nil 								
 				and cur.bIsBlank ~= true -- Never adjacent to existing blanks
 				and nxt.bIsBlank ~= true -- Never adjacent to existing blanks
+				--and self:IsFirstSlot(self:GetRealIndex(nxt.nIndex)) ~= true -- Never on the first slot of a row
 				and fComparator(Sort, cur, nxt) ~= nil -- Comparator think's the items are different
 			then				
 				nInsertIndex = idx+1
@@ -167,6 +190,11 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots, fComparator, nBlanks)
 			nBlanks = 0
 		end
 	end
+end
+
+function Sort:IsFirstSlot(nIndex)
+	Print("IsFirstSlot " .. nIndex)
+	return self.tFirstSlots[self.tSettings.eDirection][nIndex] == true
 end
 
 -- Main module operation

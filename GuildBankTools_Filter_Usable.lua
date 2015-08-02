@@ -16,6 +16,11 @@ end
 function Usable:SetSettings(tSettings)
 	self.tSettings = tSettings
 	
+	-- Default values for unspecified settings
+	if self.tSettings.bEnabled == nil then
+		self.tSettings.bEnabled = false
+	end
+	
 	-- Form may not have been loaded when this happens
 	if GBT:GetToolbarForm() ~= nil and GBT:GetToolbarForm():FindChild("UsableButton") ~= nil then
 		GBT:GetToolbarForm():FindChild("UsableButton"):SetCheck(self.tSettings.bEnabled == true)

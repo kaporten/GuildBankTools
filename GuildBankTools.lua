@@ -112,7 +112,7 @@ function GuildBankTools:OnDocLoaded()
 		end		
 		self.wndSettings:Show(false, true)
 		
-		-- Restore settings
+		-- Restore settings		
 		if self.tSettings.Arrange.Sort.eDirection == "Vertical" then
 			self.wndSettings:FindChild("DirectionVertical"):SetCheck(true)
 		else

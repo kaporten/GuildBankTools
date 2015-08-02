@@ -60,6 +60,10 @@ function Stack:DeterminePendingOperations()
 	self.tStackable = tStackable
 end
 
+function Stack:RedeterminePendingInProgress()
+	self:DeterminePendingOperations()
+end
+
 -- An item is considered stackable if it has a current stacksize < max stacksize.
 function Stack:IsItemStackable(tItem)	
 	return tItem:GetMaxStackCount() > 1 and tItem:GetStackCount() < tItem:GetMaxStackCount()

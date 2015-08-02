@@ -34,7 +34,7 @@ end
 -- No forms for Arrange modules (yet)
 function Arrange:LoadForms() end
 
-function Arrange:SetSettings(tSettings)
+function Arrange:SetSettings(tSettings)	
 	-- Store local shorthand for Arrange settings passed in
 	self.tSettings = tSettings
 	
@@ -86,8 +86,8 @@ function Arrange:UpdateModules()
 		else
 			-- Something currently in progress
 			if eInProgress == eCurrent then
-				-- This module is in progress, update arrangeables
-				module:DeterminePendingOperations()				
+				-- This module is in progress. Tell it to refresh internal state between executions (if required)
+				module:RedeterminePendingInProgress()				
 				module:UpdateProgress()
 			else
 				-- Some other module is in progress -- keep disabled
@@ -127,7 +127,6 @@ function Arrange:StartModule(eModule)
 end
 
 function Arrange:StopModule(eModule)
-	--Print("StopModule(" .. eModule .. ")")
 	-- Stopping an individual module happens by cancel button-click
 	-- In that case, run the generic stop-all modules and update all modules
 	self:StopModules()
