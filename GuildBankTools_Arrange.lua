@@ -34,6 +34,23 @@ end
 -- No forms for Arrange modules (yet)
 function Arrange:LoadForms() end
 
+function Arrange:SetSettings(tSettings)
+	-- Store local shorthand for Arrange settings passed in
+	self.tSettings = tSettings
+	
+	-- Ensure module-specific settings exist
+	for e,_ in pairs(self.enumModules) do
+		self.tSettings[e] = self.tSettings[e] or {}
+	end
+	
+	-- Pass on module-specific settings
+	if self.tModules ~= nil then
+		for e,m in pairs(self.tModules) do
+			m:SetSettings(tSettings[e])
+		end
+	end
+end
+
 
 --[[ Utility functions, checks if a/any module is in progress --]]
 

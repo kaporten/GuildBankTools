@@ -64,6 +64,9 @@ function Sort:Initialize()
 	end	
 end
 
+function Sort:SetSettings(tSettings)
+	self.tSettings = tSettings
+end
 
 	--[[ Controller "pending operations" interface --]]
 
@@ -532,6 +535,11 @@ end
 function GBT:OnSortButton_MouseExit(wndHandler, wndControl, x, y)
 	local controllerFilter = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
 	controllerFilter:ApplyFilter()
+end
+
+-- Settings UI events
+function GBT:OnChangeSortDirection(wndHandler, wndControl, eMouseButton)
+	Print("Changed direction, wndControl = " .. wndControl:GetName())
 end
 
 

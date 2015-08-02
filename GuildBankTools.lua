@@ -44,7 +44,7 @@ function GuildBankTools:Init()
 		return
 	end
 	
-	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
+	Apollo.RegisterAddon(self, true, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
 end
 
 function GuildBankTools:OnDependencyError(strDep, strErr)
@@ -62,6 +62,17 @@ function GuildBankTools:OnLoad()
 	
 	-- Ensure tSettings table always exist, even if there are no saved settings
 	self.tSettings = self.tSettings or {}
+	for e,_ in pairs(self.enumModuleTypes) do
+		self.tSettings[e] = self.tSettings[e] or {}
+	end
+
+	self.tModuleControllers = {}
+	for e,_ in pairs(self.enumModuleTypes) do
+		self.tModuleControllers[e] = Apollo.GetPackage("GuildBankTools:Controller:" .. e).tPackage
+		self.tModuleControllers[e]:Initialize()				
+		self.tModuleControllers[e]:SetSettings(self.tSettings[e])		
+	end
+	
 
 	-- Store ref for Guild Bank
 	GB = Apollo.GetAddon("GuildBank")	
@@ -75,47 +86,67 @@ function GuildBankTools:OnLoad()
 	Apollo.RegisterEventHandler("GuildBankTab", "OnGuildBankTab", self) -- Guild bank tab opened/changed.
 	Apollo.RegisterEventHandler("GuildBankItem", "OnGuildBankItem", self) -- Guild bank tab contents changed.
 
-	-- Load main form for later use (forms are created when GuildBank is opened)
+	-- Load form file. Toolbar is created from loaded file when GB hooked functions are called.
 	self.xmlDoc = XmlDoc.CreateFromFile("GuildBankTools.xml")
+	self.xmlDoc:RegisterCallback("OnDocLoaded", self)
 	
 	-- Hook into GuildBank to react to main-tab changes (not bank-vault tab changes, but f.ex. changing to the Money or Log tab)
 	self.Orig_GB_OnBankTabUncheck = GB.OnBankTabUncheck
 	GB.OnBankTabUncheck = self.Hook_GB_OnBankTabUncheck	
+
+	-- Hook into GuildBank to react to bank-tab changes
+	self.Orig_GB_OnGuildBankTab = GB.OnGuildBankTab
+	GB.OnGuildBankTab = self.Hook_GB_OnGuildBankTab
 	
 	-- Register with addon "OneVersion"
 	Event_FireGenericEvent("OneVersion_ReportAddonInfo", "GuildBankTools", Major, Minor, Patch)
+end
+
+function GuildBankTools:OnDocLoaded()
+	-- Load settings form
+	if self.xmlDoc ~= nil and self.xmlDoc:IsLoaded() then
+		self.wndSettings = Apollo.LoadForm(self.xmlDoc, "SettingsForm", nil, self)
+		if self.wndSettings == nil then			
+			Apollo.AddAddonErrorText(self, "Could not load the Settings form.")
+			return
+		end		
+		self.wndSettings:Show(false, true)
+	end
 end
 
 
 	--[[ Guild bank tab change hooks --]]
 
 -- Individual Bank tab selected
-function GuildBankTools:OnGuildBankTab(guildOwner, nTab)
+function GuildBankTools:Hook_GB_OnGuildBankTab(guildOwner, nTab)
 	--Print("OnGuildBankTab:" .. nTab)
+	-- NB: In this hooked context "self" is GuildBank, not GuildBankTools, so grab a ref to GuildBankTools
+	local GBT = Apollo.GetAddon("GuildBankTools")
+
+	-- First, let GuildBank handle the call fully
+	GBT.Orig_GB_OnGuildBankTab(GB, guildOwner, nTab)
+	
 	-- Store refs to currently selected guild and tab
-	self.guildOwner = guildOwner
-	self.nCurrentTab = nTab
+	GBT.guildOwner = guildOwner
+	GBT.nCurrentTab = nTab
 
 	-- First-hit form loading when the Bank tab is shown
-	local bIsFormLoaded = self.wndOverlayForm ~= nil and GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") ~= nil
-	if not bIsFormLoaded and self.xmlDoc ~= nil then	
+	local bIsFormLoaded = GBT.wndOverlayForm ~= nil and GB.tWndRefs.wndMain:FindChild("GuildBankToolsForm") ~= nil
+	if not bIsFormLoaded and GBT.xmlDoc ~= nil then	
 		-- Load overlayform with GuildBank's "wndMain" as parent window, and self as owner (event recipient)
-		self.wndOverlayForm = Apollo.LoadForm(self.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, self)					
+		GBT.wndOverlayForm = Apollo.LoadForm(GBT.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, GBT)					
 		
-		-- Load and initialize all modules
-		if self.tModuleControllers == nil then
-			self.tModuleControllers = {}
-			for m,_ in pairs(self.enumModuleTypes) do
-				-- Load and initialize module control
-				self.tModuleControllers[m] = Apollo.GetPackage("GuildBankTools:Controller:" .. m).tPackage
-				self.tModuleControllers[m]:LoadForms()
-				self.tModuleControllers[m]:Initialize()
+		-- (re-)load all module-forms and trigger settings update
+		if GBT.tModuleControllers ~= nil then
+			for e,c in pairs(GBT.tModuleControllers) do
+				c:LoadForms()
+				c:SetSettings(GBT.tSettings[e])	
 			end
 		end
 	end
 		
 	-- Stop any in-progress modules, and update their status
-	for eModuleType, controller in pairs(self.tModuleControllers) do
+	for eModuleType, controller in pairs(GBT.tModuleControllers) do
 		controller:StopModules()
 		controller:UpdateModules()
 	end	
@@ -249,9 +280,36 @@ function GuildBankTools:OnRestore(eType, tSavedData)
 		return 
 	end
 	
-	-- Restored savedata are just stored directly as tSettings
-	self.tSettings = tSavedData
+	-- Read settings for each controller
+	local tSettings = {}
+	for e,_ in pairs(self.enumModuleTypes) do
+		tSettings[e] = tSavedData[e] or {}		
+	end
+		
+	self.tSettings = tSettings
 end
+
+
+	--[[ UI events --]]
+	
+function GuildBankTools:OnSettingsButton(wndHandler, wndControl, eMouseButton)
+	-- Toggle settings visibility
+	if self.wndSettings:IsShown() then
+		self:OnCloseSettingsButton()
+	else
+		self:OnConfigure()
+	end
+end
+
+function GuildBankTools:OnConfigure()
+	self.wndSettings:Show(true, true)
+	self.wndSettings:ToFront()
+end
+
+function GuildBankTools:OnCloseSettingsButton()
+	self.wndSettings:Show(false, true)
+end
+
 
 
 -- Standard addon initialization

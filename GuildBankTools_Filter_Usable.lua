@@ -6,10 +6,20 @@ local Usable = {}
 local GBT = Apollo.GetAddon("GuildBankTools")
 
 function Usable:Initialize()
+	self.tSettings = self.tSettings or {}
 end
 
 function Usable:IsActive()
-	return GBT:GetToolbarForm():FindChild("UsableButton"):IsChecked()
+	return self.tSettings.bEnabled == true
+end
+
+function Usable:SetSettings(tSettings)
+	self.tSettings = tSettings
+	
+	-- Form may not have been loaded when this happens
+	if GBT:GetToolbarForm() ~= nil and GBT:GetToolbarForm():FindChild("UsableButton") ~= nil then
+		GBT:GetToolbarForm():FindChild("UsableButton"):SetCheck(self.tSettings.bEnabled == true)
+	end
 end
 
 -- Returns list of matches for input tab
@@ -123,15 +133,17 @@ end
 	--[[ React to the usable-checkbox --]]
 
 function GBT:OnUsableButton_ButtonCheck(wndHandler, wndControl, eMouseButton)
-	-- Tell Filter-controller that settings have changed for this module
-	local Controller = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
-	Controller:SettingsChanged(Controller.enumModules.Usable)
+	Usable.tSettings.bEnabled = true
+
+	-- Tell Filter-controller to update modules due to filter changes
+	Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage:UpdateModules()
 end
 
 function GBT:OnUsableButton_ButtonUncheck(wndHandler, wndControl, eMouseButton)
-	-- Tell Filter-controller that settings have changed for this module
-	local Controller = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
-	Controller:SettingsChanged(Controller.enumModules.Usable)
+	Usable.tSettings.bEnabled = false
+	
+	-- Tell Filter-controller to update modules due to filter changes
+	Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage:UpdateModules()
 end
 
 

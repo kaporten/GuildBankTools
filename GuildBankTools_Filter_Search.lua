@@ -14,6 +14,11 @@ function Search:IsActive()
 	return strSearch ~= nil and strSearch ~= ""
 end
 
+function Search:SetSettings(tSettings)
+	-- Not used for anything in this module, just leave empty {}
+	self.tSettings = tSettings
+end
+
 -- Returns list of matches for input tab
 function Search:GetMatches(tTab)
 	-- Extract search string
@@ -64,8 +69,7 @@ function GBT:OnSearchEditBox_EditBoxChanged(wndHandler, wndControl, strText)
 	end
 	
 	-- Tell Filter-controller that settings have changed for this module
-	local Controller = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
-	Controller:SettingsChanged(Controller.enumModules.Search)
+	Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage:UpdateModules()
 end
 
 function GBT:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButton)
@@ -75,8 +79,7 @@ function GBT:OnClearSearchButton_ButtonSignal(wndHandler, wndControl, eMouseButt
 	GBT:GetToolbarForm():FindChild("ClearSearchButton"):Show(false)
 	
 	-- Tell Filter-controller that settings have changed for this module
-	local Controller = Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage
-	Controller:SettingsChanged(Controller.enumModules.Search)
+	Apollo.GetPackage("GuildBankTools:Controller:Filter").tPackage:UpdateModules()	
 end
 
 

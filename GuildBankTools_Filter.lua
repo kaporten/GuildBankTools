@@ -34,13 +34,25 @@ function Filter:LoadForms()
 	end			
 end
 
+function Filter:SetSettings(tSettings)
+	-- Store local shorthand for Filter settings passed in
+	self.tSettings = tSettings
+	
+	-- Ensure module-specific settings exist
+	for e,_ in pairs(self.enumModules) do
+		tSettings[e] = tSettings[e] or {}
+	end
+	
+	-- Pass on module-specific settings
+	if self.tModules ~= nil then
+		for e,m in pairs(self.tModules) do
+			m:SetSettings(tSettings[e])
+		end
+	end
+end
+
 -- StopModueles does nothing, filter-modules are not event/progress driven but instantly applied after updating.
 function Filter:StopModules() end
-
--- Callback function from modules when settings changed (usable-only toggled, text entered)
-function Filter:SettingsChanged(eModule)
-	self:UpdateModules()
-end
 
 -- Called when changes happen from top (GBT changed tabs) or bottom (module changed settings)
 function Filter:UpdateModules()
@@ -141,7 +153,9 @@ function Filter:ShowTabCountIndicators(tTabMatchCounter)
 	for nTab,wndHighlight in ipairs(self.tTabHighlights) do
 		if tTabMatchCounter[nTab] ~= nil and tTabMatchCounter[nTab] > 0 then
 			-- Set counter, and show border for non-current tabs
-			wndHighlight:FindChild("Counter"):SetText(tTabMatchCounter[nTab])
+			if wndHighlight:FindChild("Counter") ~= nil then
+				wndHighlight:FindChild("Counter"):SetText(tTabMatchCounter[nTab])
+			end
 			--wndHighlight:FindChild("Border"):Show(GBT:GetCurrentTab() ~= nTab)
 
 			-- Show highlight frame
@@ -154,8 +168,10 @@ function Filter:ShowTabCountIndicators(tTabMatchCounter)
 end
 
 function Filter:HideTabCountIndicators()
-	for nTab,wndHighlight in ipairs(self.tTabHighlights) do
-		wndHighlight:Show(false)
+	if self.tTabHighlights ~= nil then
+		for nTab,wndHighlight in ipairs(self.tTabHighlights) do
+			wndHighlight:Show(false)
+		end
 	end
 end
 

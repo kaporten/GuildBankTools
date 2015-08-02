@@ -10,6 +10,11 @@ function Stack:Initialize()
 	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
 end
 
+function Stack:SetSettings(tSettings)
+	-- Not used
+	self.tSettings = tSettings
+end
+
 function Stack:HasPendingOperations()	
 	return self:GetPendingOperationCount() > 0
 end
