@@ -10,7 +10,7 @@ require "Window"
 	--[[ Globals and enums --]]
 
 -- Addon class itself
-local Major, Minor, Patch = 3, 1, 1
+local Major, Minor, Patch = 4, 0, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -111,6 +111,13 @@ function GuildBankTools:OnDocLoaded()
 			return
 		end		
 		self.wndSettings:Show(false, true)
+		
+		-- Restore settings
+		if self.tSettings.Arrange.Sort.eDirection == "Vertical" then
+			self.wndSettings:FindChild("DirectionVertical"):SetCheck(true)
+		else
+			self.wndSettings:FindChild("DirectionHorizontal"):SetCheck(true)
+		end
 	end
 end
 

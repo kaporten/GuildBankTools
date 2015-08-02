@@ -68,6 +68,7 @@ function Sort:SetSettings(tSettings)
 	self.tSettings = tSettings
 end
 
+
 	--[[ Controller "pending operations" interface --]]
 
 function Sort:HasPendingOperations()
@@ -539,7 +540,14 @@ end
 
 -- Settings UI events
 function GBT:OnChangeSortDirection(wndHandler, wndControl, eMouseButton)
-	Print("Changed direction, wndControl = " .. wndControl:GetName())
+	if wndControl:GetName() == "DirectionVertical" then
+		Sort.tSettings.eDirection = Sort.enumDirection.Vertical
+	else
+		Sort.tSettings.eDirection = Sort.enumDirection.Horizontal
+	end	
+	
+	local controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
+	controller:UpdateModules()
 end
 
 
