@@ -67,10 +67,12 @@ function Sort:Initialize()
 	self.tFirstSlots = {}
 	self.tFirstSlots[self.enumDirection.Horizontal] = {}
 	self.tFirstSlots[self.enumDirection.Vertical] = {}
+	-- First slot in a vertical row down (every 17th slot) marks new horizontal row
 	for _,idx in ipairs({1, 18, 35, 52, 69, 86, 103, 120}) do
 		self.tFirstSlots[self.enumDirection.Horizontal][idx] = true
 	end
-	for _,idx in ipairs({1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 80, 87,  94, 101, 108, 115, 122}) do
+	-- First slot in a horizontal row across (ie., top row) marks new vertical row
+	for _,idx in ipairs({1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}) do
 		self.tFirstSlots[self.enumDirection.Vertical][idx] = true
 	end
 end
@@ -129,19 +131,34 @@ function Sort:DeterminePendingOperations()
 	table.sort(tCurrent, Sort.TableSortComparator)
 
 	-- Insert first between Family, then Category, then Type until we run out of blanks
-	fInsertionComparators = {Sort.Comparator_Family, Sort.Comparator_Category, Sort.Comparator_Type}
+	fInsertionComparators = {Sort.Comparator_Family, Sort.Comparator_Category}--, Sort.Comparator_Type}
 	for i,f in ipairs(fInsertionComparators) do
 		local blanks = nil
-		blanks = Sort:DistributeBlanksSingle(tCurrent, GBT:GetBankTabSlots(), f, blanks) 
+		blanks = Sort:DistributeBlanksSingle(tCurrent, GBT:GetBankTabSlots(), f, blanks) 		
+	end	
+	
+	-- After inserting blanks, remove blanks at first-slots. Do this by copying into a new array and skipping any blanks at undesired indices
+	local tNew = {}
+
+	for idx,entry in ipairs(tCurrent) do		
+		if entry.bIsBlank ~= true then
+			-- Not a blank slot, always copy
+			tNew[#tNew+1] = entry
+		else
+			-- Blank slot, at a non-first index?
+			if self:IsFirstSlot(#tNew+1) ~= true then				
+				tNew[#tNew+1] = entry
+			end
+		end
+	end
+
+	-- After inserting blanks, realign indices on all contained slots' .nIndex with new sorted-index
+	for newIndex,entry in ipairs(tNew) do		
+		entry.nIndex = newIndex
 	end	
 
-	-- After distributing spaces, realign indices on all contained slots' .nIndex with new sorted-index
-	for newIndex,entry in pairs(tCurrent) do		
-		entry.nIndex = newIndex
-	end
-	
 	-- Store result in self-variable
-	self.tSortedSlots = tCurrent
+	self.tSortedSlots = tNew
 end
 
 function Sort:RedeterminePendingInProgress()
@@ -158,43 +175,46 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots, fComparator, nBlanks)
 		return 
 	end
 	
+	local nInsertIndex = 1
 	while nBlanks > 0 do
-		local nInsertIndex = 1
-		
-		-- Scan for first appropriate spot to insert
+		-- Scan for first appropriate spot to insert, starting from last insertion point
+		local bFound = false
 		for idx=nInsertIndex, #tEntries do
 			local cur = tEntries[idx]
 			local nxt = tEntries[idx+1]
-
+			
 			if	nxt ~= nil 								
 				and cur.bIsBlank ~= true -- Never adjacent to existing blanks
 				and nxt.bIsBlank ~= true -- Never adjacent to existing blanks
-				--and self:IsFirstSlot(self:GetRealIndex(nxt.nIndex)) ~= true -- Never on the first slot of a row
 				and fComparator(Sort, cur, nxt) ~= nil -- Comparator think's the items are different
-			then				
-				nInsertIndex = idx+1
+			then
+				bFound = true
+				nInsertIndex = idx
 				break
-			end
+			end			
 		end
 		
 		-- Was any insertion point found?
-		if nInsertIndex > 1 then
+		if bFound then
 			-- Appropriate insertion point found, insert blank and decrement blanks left			
-			table.insert(tEntries, nInsertIndex, {
+			table.insert(tEntries, nInsertIndex+1, {
 				nIndex = "new",
 				bIsBlank = true
 			})			
-			nBlanks = nBlanks - 1
+			nBlanks = nBlanks - 1				
 		else
 			-- No appropriate insertion point found, break outer loop by setting blanks left to 0
-			nBlanks = 0
+			return nBlanks
 		end
-	end
+	end	
 end
 
 function Sort:IsFirstSlot(nIndex)
-	Print("IsFirstSlot " .. nIndex)
-	return self.tFirstSlots[self.tSettings.eDirection][nIndex] == true
+	local bIsFirst = self.tFirstSlots[self.tSettings.eDirection][self:GetRealIndex(nIndex)] == true
+--	if bIsFirst then
+--		Print("First slot identified at virtual index " .. nIndex .. ", real index " .. self:GetRealIndex(nIndex))
+--	end
+	return bIsFirst
 end
 
 -- Main module operation
@@ -405,7 +425,13 @@ function Sort:Comparator_Category(tSlotA, tSlotB)
 end
 
 function Sort:Comparator_Type(tSlotA, tSlotB)
-	-- Family (Crafting, Schematic etc)
+	local typeA = tSlotA.itemInSlot:GetItemType()
+	local typeB = tSlotB.itemInSlot:GetItemType()
+	
+	if typeA == nil or typeB == nil then
+		return Sort:CompareNils(typeA, typeB)
+	end
+	
 	return self:CompareValues(
 		tSlotA.itemInSlot:GetItemType(), 
 		tSlotB.itemInSlot:GetItemType())
