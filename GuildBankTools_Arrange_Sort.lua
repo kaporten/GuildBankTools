@@ -489,12 +489,12 @@ function Sort:Comparator_Category_SkillAMPs(tSlotA, tSlotB)
 end
 
 function Sort:Comparator_Category_Runes(tSlotA, tSlotB)
-	local runeSortOrderA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.tRuneInfo.nSortOrder
-	local runeSortOrderB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.tRuneInfo.nSortOrder
+	local runeInfoA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.tRuneInfo
+	local runeInfoB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.tRuneInfo
 	
 	return Sort:CompareValues(
-		runeSortOrderA, 
-		runeSortOrderB)
+		runeInfoA.eType, 
+		runeInfoB.eType)
 end
 
 
