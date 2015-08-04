@@ -11,9 +11,7 @@ Sort.enumDirection = {
 }
 
 function Sort:Initialize()
-	-- Settings... no way to modify them yet, just use a default sort-direction=Horizontal
-	self.tSettings = self.tSettings or {}
-	self.tSettings.eDirection = self.tSettings.eDirection or self.enumDirection.Horizontal
+	self:SetDefaultSettings()
 
 	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
 
@@ -77,13 +75,37 @@ function Sort:Initialize()
 	end
 end
 
-function Sort:SetSettings(tSettings)
-	--Print("Sort:SetSettings())")
-	self.tSettings = tSettings
+function Sort:SetDefaultSettings()
+	self.tSettings = {}
+	self.tSettings.eDirection = self.enumDirection.Horizontal
+end
+
+function Sort:GetSettings()
+	if self.tSettings == nil then
+		self:SetDefaultSettings()
+	end
+
+	-- Weave in current settings from all controllers
+	if self.tModules ~= nil then
+		for e,m in pairs(self.tModules) do
+			self.tSettings[e] = m:GetSettings()
+		end	
+	end
 	
-	-- Default values for unspecified settings
-	if self.tSettings.eDirection == nil then
-		self.tSettings.eDirection = self.enumDirection.Horizontal
+	return self.tSettings
+end
+
+function Sort:SetSettings(tInputSettings)
+	if tInputSettings == nil then
+		return
+	end
+	
+	-- Direction present in input settings. Valid?
+	if tInputSettings.eDirection ~= nil then
+		if Sort.enumDirection[tInputSettings.eDirection] ~= nil then
+			-- Accept input eDirection as new settings
+			self.tSettings.eDirection = tInputSettings.eDirection
+		end		
 	end
 end
 

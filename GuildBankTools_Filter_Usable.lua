@@ -13,15 +13,31 @@ function Usable:IsActive()
 	return self.tSettings.bEnabled == true
 end
 
-function Usable:SetSettings(tSettings)
-	self.tSettings = tSettings
+function Usable:SetDefaultSettings()
+	self.tSettings = {}
+	self.tSettings.bEnabled = false
+end
+
+function Usable:GetSettings()
+	if self.tSettings == nil then
+		self:SetDefaultSettings()
+	end
+	
+	return self.tSettings
+end
+
+function Usable:SetSettings(tInputSettings)
+	if tSettings == nil then
+		return
+	end
 	
 	-- Default values for unspecified settings
-	if self.tSettings.bEnabled == nil then
-		self.tSettings.bEnabled = false
+	if type(tInputSettings.bEnabled) == "boolean" then
+		self.tSettings.bEnabled = tInputSettings.bEnabled
 	end
 	
 	-- Form may not have been loaded when this happens
+	-- TODO: Move to settings UI handler
 	if GBT:GetToolbarForm() ~= nil and GBT:GetToolbarForm():FindChild("UsableButton") ~= nil then
 		GBT:GetToolbarForm():FindChild("UsableButton"):SetCheck(self.tSettings.bEnabled == true)
 	end

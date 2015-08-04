@@ -11,6 +11,8 @@ Arrange.enumModules = {
 }
 
 function Arrange:Initialize()
+	self:SetDefaultSettings()
+	
 	-- Load and intialize modules
 	self.tModules = {}
 	for eModule,_ in pairs(self.enumModules) do
@@ -34,19 +36,38 @@ end
 -- No forms for Arrange modules (yet)
 function Arrange:LoadForms() end
 
-function Arrange:SetSettings(tSettings)	
-	-- Store local shorthand for Arrange settings passed in
-	self.tSettings = tSettings
-	
-	-- Ensure module-specific settings exist
+function Arrange:SetDefaultSettings()
+	-- Default settings are just empty arrays for modules, no Arrange settings yet
+	self.tSettings = {}
 	for e,_ in pairs(self.enumModules) do
-		self.tSettings[e] = self.tSettings[e] or {}
+		self.tSettings[e] = {}
+	end	
+end
+
+function Arrange:GetSettings()
+	if self.tSettings == nil then
+		self:SetDefaultSettings()
 	end
 	
-	-- Pass on module-specific settings
+	-- Weave in current settings from all modules
 	if self.tModules ~= nil then
 		for e,m in pairs(self.tModules) do
-			m:SetSettings(tSettings[e])
+			self.tSettings[e] = m:GetSettings()
+		end	
+	end
+	
+	return self.tSettings
+end
+
+function Arrange:SetSettings(tInputSettings)	
+	if tInputSettings == nil then
+		return
+	end
+		
+	-- Pass on module-specific settings. No settings for self/Arrange yet.
+	if self.tModules ~= nil then
+		for e,m in pairs(self.tModules) do
+			m:SetSettings(tInputSettings[e])
 		end
 	end
 end

@@ -10,10 +10,22 @@ function Stack:Initialize()
 	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
 end
 
-function Stack:SetSettings(tSettings)
-	-- Not used
-	self.tSettings = tSettings
+function Stack:SetDefaultSettings()
+	self.tSettings = {}
 end
+
+function Stack:GetSettings()
+	if self.tSettings == nil then
+		self:SetDefaultSettings()
+	end
+	
+	return self.tSettings
+end
+
+function Stack:SetSettings(tInputSettings)
+	-- No settings "accepted" by this module
+end
+
 
 function Stack:HasPendingOperations()	
 	return self:GetPendingOperationCount() > 0

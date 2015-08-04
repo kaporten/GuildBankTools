@@ -10,7 +10,7 @@ require "Window"
 	--[[ Globals and enums --]]
 
 -- Addon class itself
-local Major, Minor, Patch = 4, 0, 0
+local Major, Minor, Patch = 4, 0, 1
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -44,7 +44,7 @@ function GuildBankTools:Init()
 		return
 	end
 	
-	Apollo.RegisterAddon(self, true, "GuildBankTools", {"GuildBank", "GuildAlerts"})	
+	Apollo.RegisterAddon(self, true, "GuildBankTools", {"GuildBank", "GuildAlerts"})
 end
 
 function GuildBankTools:OnDependencyError(strDep, strErr)
@@ -59,21 +59,16 @@ end
 
 -- Addon being loaded
 function GuildBankTools:OnLoad()
+	self:SetDefaultSettings()
 	
-	-- Ensure tSettings table always exist, even if there are no saved settings
-	self.tSettings = self.tSettings or {}
-	for e,_ in pairs(self.enumModuleTypes) do
-		self.tSettings[e] = self.tSettings[e] or {}
-	end
-
+	-- Create and initialize all modules
 	self.tModuleControllers = {}
 	for e,_ in pairs(self.enumModuleTypes) do
 		self.tModuleControllers[e] = Apollo.GetPackage("GuildBankTools:Controller:" .. e).tPackage
 		self.tModuleControllers[e]:Initialize()				
-		self.tModuleControllers[e]:SetSettings(self.tSettings[e])		
+		self.tModuleControllers[e]:SetSettings(self.tSettings[e])	
 	end
 	
-
 	-- Store ref for Guild Bank
 	GB = Apollo.GetAddon("GuildBank")	
 	if GB == nil then
@@ -267,6 +262,41 @@ function GuildBankTools:GetCurrentTab()
 end
 
 
+function GuildBankTools:SetDefaultSettings()
+	self.tSettings = {}
+	for e,_ in pairs(self.enumModuleTypes) do
+		self.tSettings[e] = {}
+	end		
+end
+
+function GuildBankTools:GetSettings()
+	if self.tSettings == nil then
+		self:SetDefaultSettings()
+	end
+	
+	-- Weave in current settings from all controllers
+	if self.tModuleControllers ~= nil then
+		for e,m in pairs(self.tModuleControllers) do
+			self.tSettings[e] = m:GetSettings()
+		end	
+	end	
+	
+	return self.tSettings
+end
+
+function GuildBankTools:SetSettings(tInputSettings)	
+	if tInputSettings == nil then
+		return
+	end
+		
+	-- Pass on module-specific settings. No global GBT settings yet.
+	if self.tModuleControllers ~= nil then
+		for e,m in pairs(self.tModuleControllers) do
+			m:SetSettings(tInputSettings[e])
+		end
+	end
+end
+
 
 	--[[ Settings save/restore --]]
 	
@@ -276,9 +306,7 @@ function GuildBankTools:OnSave(eType)
 		return 
 	end
 	
-	
-	-- Simply save the entire tSettings structure
-	return self.tSettings
+	return self:GetSettings()
 end
 
 -- Restore addon config per character. Called by engine when loading UI.
@@ -290,9 +318,10 @@ function GuildBankTools:OnRestore(eType, tSavedData)
 	-- Read settings for each controller
 	local tSettings = {}
 	for e,_ in pairs(self.enumModuleTypes) do
-		tSettings[e] = tSavedData[e] or {}		
+		tSettings[e] = tSavedData[e] or {}
 	end
 		
+		-- how when to restore
 	self.tSettings = tSettings
 end
 
