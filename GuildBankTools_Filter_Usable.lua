@@ -6,40 +6,36 @@ local Usable = {}
 local GBT = Apollo.GetAddon("GuildBankTools")
 
 function Usable:Initialize()
-	self.tSettings = self.tSettings or {}
 end
 
 function Usable:IsActive()
 	return self.tSettings.bEnabled == true
 end
 
-function Usable:SetDefaultSettings()
-	self.tSettings = {}
-	self.tSettings.bEnabled = false
-end
-
 function Usable:GetSettings()
 	if self.tSettings == nil then
-		self:SetDefaultSettings()
+		self.tSettings = self:GetDefaultSettings()
 	end
-	
 	return self.tSettings
 end
 
-function Usable:SetSettings(tInputSettings)
-	if tSettings == nil then
+function Usable:GetDefaultSettings()
+	--Print("Usable:GetDefaultSettings")
+	local tDefaultSettings = {}
+	tDefaultSettings.bEnabled = false
+	
+	return tDefaultSettings
+end
+
+function Usable:RestoreSettings(tSavedSettings)
+	--Print("Usable:GetDefaultSettings")
+	if tSavedSettings == nil then
 		return
 	end
 	
-	-- Default values for unspecified settings
-	if type(tInputSettings.bEnabled) == "boolean" then
-		self.tSettings.bEnabled = tInputSettings.bEnabled
-	end
-	
-	-- Form may not have been loaded when this happens
-	-- TODO: Move to settings UI handler
-	if GBT:GetToolbarForm() ~= nil and GBT:GetToolbarForm():FindChild("UsableButton") ~= nil then
-		GBT:GetToolbarForm():FindChild("UsableButton"):SetCheck(self.tSettings.bEnabled == true)
+	-- Valid enable-flag?
+	if type(tSavedSettings.bEnabled) == "boolean" then
+		self.tSettings.bEnabled = tSavedSettings.bEnabled
 	end
 end
 

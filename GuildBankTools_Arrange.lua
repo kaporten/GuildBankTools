@@ -10,9 +10,7 @@ Arrange.enumModules = {
 	Sort = "Sort",
 }
 
-function Arrange:Initialize()
-	self:SetDefaultSettings()
-	
+function Arrange:Initialize()	
 	-- Load and intialize modules
 	self.tModules = {}
 	for eModule,_ in pairs(self.enumModules) do
@@ -24,7 +22,7 @@ function Arrange:Initialize()
 	-- GuildAlerts is optional, so only hook if it is found
 	local GA = Apollo.GetAddon("GuildAlerts")
 	if GA ~= nil then
-		-- GuildAlerts found, hook OnGuildResult so "guid bank busy" messages can be intercepted and suppressed
+		-- GuildAlerts found, hook OnGuildResult so "guild bank busy" messages can be intercepted and suppressed
 		self.Orig_GA_OnGuildResult = GA.OnGuildResult
 		GA.OnGuildResult = self.Hook_GA_OnGuildResult	
 	else
@@ -36,38 +34,34 @@ end
 -- No forms for Arrange modules (yet)
 function Arrange:LoadForms() end
 
-function Arrange:SetDefaultSettings()
-	-- Default settings are just empty arrays for modules, no Arrange settings yet
-	self.tSettings = {}
-	for e,_ in pairs(self.enumModules) do
-		self.tSettings[e] = {}
-	end	
-end
-
 function Arrange:GetSettings()
 	if self.tSettings == nil then
-		self:SetDefaultSettings()
+		self.tSettings = self:GetDefaultSettings()
 	end
-	
-	-- Weave in current settings from all modules
-	if self.tModules ~= nil then
-		for e,m in pairs(self.tModules) do
-			self.tSettings[e] = m:GetSettings()
-		end	
-	end
-	
 	return self.tSettings
 end
 
-function Arrange:SetSettings(tInputSettings)	
-	if tInputSettings == nil then
+function Arrange:GetDefaultSettings()
+	--Print("Arrange:GetDefaultSettings")
+	-- Get default settings for each module
+	local tDefaultSettings = {}
+	for e,m in pairs(self.tModules) do
+		tDefaultSettings[e] = m:GetSettings()
+	end	
+	
+	return tDefaultSettings
+end
+
+function Arrange:RestoreSettings(tSavedSettings)
+	--Print("Arrange:RestoreSettings")
+	if tSavedSettings == nil then
 		return
 	end
 		
-	-- Pass on module-specific settings. No settings for self/Arrange yet.
+	-- Pass on module-specific settings. No settings for Arrange yet.
 	if self.tModules ~= nil then
 		for e,m in pairs(self.tModules) do
-			m:SetSettings(tInputSettings[e])
+			m:RestoreSettings(tSavedSettings[e])
 		end
 	end
 end

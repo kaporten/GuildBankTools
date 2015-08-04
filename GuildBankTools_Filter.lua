@@ -34,38 +34,35 @@ function Filter:LoadForms()
 	end			
 end
 
-function Filter:SetDefaultSettings()
-	-- Default settings are just empty arrays for modules, no Filter settings yet
-	self.tSettings = {}
-	for e,_ in pairs(self.enumModules) do
-		self.tSettings[e] = {}
-	end	
-end
-
 function Filter:GetSettings()
 	if self.tSettings == nil then
-		self:SetDefaultSettings()
+		self.tSettings = self:GetDefaultSettings()
 	end
-	
-	-- Weave in current settings from all modules
-	if self.tModules ~= nil then
-		for e,m in pairs(self.tModules) do
-			self.tSettings[e] = m:GetSettings()
-		end	
-	end
-	
 	return self.tSettings
 end
 
-function Filter:SetSettings(tInputSettings)	
-	if tInputSettings == nil then
+function Filter:GetDefaultSettings()
+	--Print("Filter:GetDefaultSettings")
+	-- Get default settings for each module
+	local tDefaultSettings = {}
+	for e,m in pairs(self.tModules) do
+		tDefaultSettings[e] = m:GetSettings()
+	end
+	
+	return tDefaultSettings
+end
+
+
+function Filter:RestoreSettings(tSavedSettings)
+	--Print("Filter:RestoreSettings")
+	if tSavedSettings == nil then
 		return
 	end
 		
-	-- Pass on module-specific settings. No settings for self/Filter yet.
+	-- Pass on module-specific settings. No settings for Filter yet.
 	if self.tModules ~= nil then
 		for e,m in pairs(self.tModules) do
-			m:SetSettings(tInputSettings[e])
+			m:RestoreSettings(tSavedSettings[e])
 		end
 	end
 end

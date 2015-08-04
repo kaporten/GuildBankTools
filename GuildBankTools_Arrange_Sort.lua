@@ -11,8 +11,6 @@ Sort.enumDirection = {
 }
 
 function Sort:Initialize()
-	self:SetDefaultSettings()
-
 	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
 
 	-- Sort Comparators, in order-of-execution. 
@@ -75,39 +73,38 @@ function Sort:Initialize()
 	end
 end
 
-function Sort:SetDefaultSettings()
-	self.tSettings = {}
-	self.tSettings.eDirection = self.enumDirection.Horizontal
-end
-
 function Sort:GetSettings()
 	if self.tSettings == nil then
-		self:SetDefaultSettings()
+		self.tSettings = self:GetDefaultSettings()
 	end
-
-	-- Weave in current settings from all controllers
-	if self.tModules ~= nil then
-		for e,m in pairs(self.tModules) do
-			self.tSettings[e] = m:GetSettings()
-		end	
-	end
-	
 	return self.tSettings
+
 end
 
-function Sort:SetSettings(tInputSettings)
-	if tInputSettings == nil then
+function Sort:GetDefaultSettings()
+	--Print("Sort:GetDefaultSettings")
+	local tDefaultSettings = {}
+	tDefaultSettings.eDirection = self.enumDirection.Horizontal
+	
+	return tDefaultSettings
+end
+
+function Sort:RestoreSettings(tSavedSettings)
+	--Print("Sort:GetDefaultSettings")
+	if tSavedSettings == nil then
 		return
 	end
-	
-	-- Direction present in input settings. Valid?
-	if tInputSettings.eDirection ~= nil then
-		if Sort.enumDirection[tInputSettings.eDirection] ~= nil then
+
+	-- Valid direction
+	if tSavedSettings.eDirection ~= nil then
+		if self.enumDirection[tSavedSettings.eDirection] ~= nil then			
 			-- Accept input eDirection as new settings
-			self.tSettings.eDirection = tInputSettings.eDirection
+			self.tSettings.eDirection = tSavedSettings.eDirection
+			--Print("Sort: Restored eDirection=" .. self.tSettings.eDirection)
 		end		
 	end
 end
+
 
 
 	--[[ Controller "pending operations" interface --]]

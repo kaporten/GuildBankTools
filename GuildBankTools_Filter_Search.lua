@@ -14,20 +14,19 @@ function Search:IsActive()
 	return strSearch ~= nil and strSearch ~= ""
 end
 
-function Search:SetDefaultSettings()
-	self.tSettings = {}
-end
 
 function Search:GetSettings()
 	if self.tSettings == nil then
-		self:SetDefaultSettings()
+		self.tSettings = self:GetDefaultSettings()
 	end
-	
 	return self.tSettings
 end
 
-function Search:SetSettings(tSettings)
-	-- No settings "accepted" by this module
+function Search:GetDefaultSettings()
+	return {}
+end
+
+function Search:RestoreSettings(tSavedSettings)
 end
 
 -- Returns list of matches for input tab

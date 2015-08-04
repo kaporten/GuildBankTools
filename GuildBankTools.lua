@@ -59,16 +59,15 @@ end
 
 -- Addon being loaded
 function GuildBankTools:OnLoad()
-	self:SetDefaultSettings()
-	
 	-- Create and initialize all modules
 	self.tModuleControllers = {}
 	for e,_ in pairs(self.enumModuleTypes) do
 		self.tModuleControllers[e] = Apollo.GetPackage("GuildBankTools:Controller:" .. e).tPackage
 		self.tModuleControllers[e]:Initialize()				
-		self.tModuleControllers[e]:SetSettings(self.tSettings[e])	
 	end
 	
+	self.tSettings = self:GetDefaultSettings()
+		
 	-- Store ref for Guild Bank
 	GB = Apollo.GetAddon("GuildBank")	
 	if GB == nil then
@@ -98,6 +97,11 @@ function GuildBankTools:OnLoad()
 end
 
 function GuildBankTools:OnDocLoaded()
+	-- Now that XML doc with forms is loaded, restore saved settings
+	if self.tSavedSettings ~= nil then
+		self:RestoreSettings(self.tSavedSettings)
+	end
+
 	-- Load settings form
 	if self.xmlDoc ~= nil and self.xmlDoc:IsLoaded() then
 		self.wndSettings = Apollo.LoadForm(self.xmlDoc, "SettingsForm", nil, self)
@@ -107,11 +111,13 @@ function GuildBankTools:OnDocLoaded()
 		end		
 		self.wndSettings:Show(false, true)
 		
-		-- Restore settings		
+		-- Apply settings to loaded UI
 		if self.tSettings.Arrange.Sort.eDirection == "Vertical" then
+			--self.wndSettings:FindChild("DirectionHorizontal"):SetCheck(false)
 			self.wndSettings:FindChild("DirectionVertical"):SetCheck(true)
 		else
 			self.wndSettings:FindChild("DirectionHorizontal"):SetCheck(true)
+			--self.wndSettings:FindChild("DirectionVertical"):SetCheck(false)			
 		end
 	end
 end
@@ -138,13 +144,16 @@ function GuildBankTools:Hook_GB_OnGuildBankTab(guildOwner, nTab)
 		-- Load overlayform with GuildBank's "wndMain" as parent window, and self as owner (event recipient)
 		GBT.wndOverlayForm = Apollo.LoadForm(GBT.xmlDoc, "GuildBankToolsForm", GB.tWndRefs.wndMain, GBT)					
 		
-		-- (re-)load all module-forms and trigger settings update
+		-- (re-)load all module-forms
 		if GBT.tModuleControllers ~= nil then
 			for e,c in pairs(GBT.tModuleControllers) do
 				c:LoadForms()
-				c:SetSettings(GBT.tSettings[e])	
 			end
 		end
+		
+		if GBT:GetToolbarForm() ~= nil and GBT:GetToolbarForm():FindChild("UsableButton") ~= nil then
+			GBT:GetToolbarForm():FindChild("UsableButton"):SetCheck(GBT.tSettings.Filter.Usable.bEnabled == true)
+		end		
 	end
 		
 	-- Stop any in-progress modules, and update their status
@@ -262,43 +271,9 @@ function GuildBankTools:GetCurrentTab()
 end
 
 
-function GuildBankTools:SetDefaultSettings()
-	self.tSettings = {}
-	for e,_ in pairs(self.enumModuleTypes) do
-		self.tSettings[e] = {}
-	end		
-end
-
-function GuildBankTools:GetSettings()
-	if self.tSettings == nil then
-		self:SetDefaultSettings()
-	end
-	
-	-- Weave in current settings from all controllers
-	if self.tModuleControllers ~= nil then
-		for e,m in pairs(self.tModuleControllers) do
-			self.tSettings[e] = m:GetSettings()
-		end	
-	end	
-	
-	return self.tSettings
-end
-
-function GuildBankTools:SetSettings(tInputSettings)	
-	if tInputSettings == nil then
-		return
-	end
-		
-	-- Pass on module-specific settings. No global GBT settings yet.
-	if self.tModuleControllers ~= nil then
-		for e,m in pairs(self.tModuleControllers) do
-			m:SetSettings(tInputSettings[e])
-		end
-	end
-end
-
 
 	--[[ Settings save/restore --]]
+
 	
 -- Save addon config per character. Called by engine when performing a controlled game shutdown.
 function GuildBankTools:OnSave(eType)
@@ -306,23 +281,42 @@ function GuildBankTools:OnSave(eType)
 		return 
 	end
 	
-	return self:GetSettings()
+	return self.tSettings
 end
 
 -- Restore addon config per character. Called by engine when loading UI.
-function GuildBankTools:OnRestore(eType, tSavedData)
+function GuildBankTools:OnRestore(eType, tSavedSettings)
 	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
 		return 
 	end
-	
-	-- Read settings for each controller
-	local tSettings = {}
-	for e,_ in pairs(self.enumModuleTypes) do
-		tSettings[e] = tSavedData[e] or {}
-	end
+
+	-- Save for later restore
+	self.tSavedSettings = tSavedSettings	
+end
+
+function GuildBankTools:GetDefaultSettings()
+	--Print("GuildBankTools:GetDefaultSettings")
+	local tDefaultSettings = {}
 		
-		-- how when to restore
-	self.tSettings = tSettings
+	-- Get default settings for each controller
+	for e,m in pairs(self.tModuleControllers) do
+		tDefaultSettings[e] = m:GetSettings()
+	end		
+	
+	return tDefaultSettings
+end
+
+function GuildBankTools:RestoreSettings(tSavedSettings)
+	--Print("GuildBankTools:RestoreSettings")
+	-- No GBT-wide settings yet
+	-- self:RestoreSettings()
+
+	-- Ask each controller to restore data form tSavedSettings into self.tSettings
+	if self.tModuleControllers ~= nil then
+		for e,m in pairs(self.tModuleControllers) do
+			m:RestoreSettings(tSavedSettings[e])
+		end
+	end
 end
 
 

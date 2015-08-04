@@ -10,20 +10,18 @@ function Stack:Initialize()
 	self.Controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage
 end
 
-function Stack:SetDefaultSettings()
-	self.tSettings = {}
-end
-
 function Stack:GetSettings()
 	if self.tSettings == nil then
-		self:SetDefaultSettings()
+		self.tSettings = self:GetDefaultSettings()
 	end
-	
 	return self.tSettings
 end
 
-function Stack:SetSettings(tInputSettings)
-	-- No settings "accepted" by this module
+function Stack:GetDefaultSettings()
+	return {}
+end
+
+function Stack:RestoreSettings(tSavedSettings)
 end
 
 
