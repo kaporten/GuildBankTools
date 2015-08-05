@@ -10,7 +10,7 @@ require "Window"
 	--[[ Globals and enums --]]
 
 -- Addon class itself
-local Major, Minor, Patch = 4, 0, 1
+local Major, Minor, Patch = 4, 1, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -100,6 +100,7 @@ function GuildBankTools:OnDocLoaded()
 	-- Now that XML doc with forms is loaded, restore saved settings
 	if self.tSavedSettings ~= nil then
 		self:RestoreSettings(self.tSavedSettings)
+		self.tSavedSettings = nil
 	end
 
 	-- Load settings form

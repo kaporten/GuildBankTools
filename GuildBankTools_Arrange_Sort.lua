@@ -36,7 +36,8 @@ function Sort:Initialize()
 	-- Comparators for individual Categories
 	-- Index is category type
 	self.tComparators_Category = {
-		-- [67] = self.Comparator_Category_Decor,
+
+		[88] = self.Comparator_Category_Bags,
 		[130] = self.Comparator_Category_SkillAMPs,
 		[135] = self.Comparator_Category_Runes,
 	}	
@@ -514,6 +515,15 @@ function Sort:Comparator_Category_Runes(tSlotA, tSlotB)
 	return Sort:CompareValues(
 		runeInfoA.eType, 
 		runeInfoB.eType)
+end
+
+function Sort:Comparator_Category_Bags(tSlotA, tSlotB)
+	local tPrimaryA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary
+	local tPrimaryB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary
+	
+	return Sort:CompareValues(
+		tPrimaryA.nBagSlots, 
+		tPrimaryB.nBagSlots)
 end
 
 
