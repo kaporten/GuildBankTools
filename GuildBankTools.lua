@@ -10,7 +10,7 @@ require "Window"
 	--[[ Globals and enums --]]
 
 -- Addon class itself
-local Major, Minor, Patch = 4, 1, 0
+local Major, Minor, Patch = 4, 0, 2
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -41,6 +41,7 @@ function GuildBankTools:Init()
 	-- Only actually load GuildBankTools if it is not already loaded
 	-- This is to prevent double-loads caused by "guildbanktools" vs "GuildBankTools" dir renames
 	if Apollo.GetAddon("GuildBankTools") ~= nil then
+		_G.bGuildBankToolsDoubleLoad = true
 		return
 	end
 	
@@ -59,6 +60,7 @@ end
 
 -- Addon being loaded
 function GuildBankTools:OnLoad()
+
 	-- Create and initialize all modules
 	self.tModuleControllers = {}
 	for e,_ in pairs(self.enumModuleTypes) do
@@ -97,6 +99,10 @@ function GuildBankTools:OnLoad()
 end
 
 function GuildBankTools:OnDocLoaded()
+	if _G.bGuildBankToolsDoubleLoad == true then 
+		Print("WARNING: GuildBankTools double-registration issue detected. Addon will not work properly. Please see GuildBankTools on Curse for a description of how to fix this.")
+	end
+
 	-- Now that XML doc with forms is loaded, restore saved settings
 	if self.tSavedSettings ~= nil then
 		self:RestoreSettings(self.tSavedSettings)
