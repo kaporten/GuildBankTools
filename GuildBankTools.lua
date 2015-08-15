@@ -45,7 +45,7 @@ function GuildBankTools:Init()
 		return
 	end
 	
-	Apollo.RegisterAddon(self, true, "GuildBankTools", {"GuildBank", "GuildAlerts"})
+	Apollo.RegisterAddon(self, false, "GuildBankTools", {"GuildBank", "GuildAlerts"})
 end
 
 function GuildBankTools:OnDependencyError(strDep, strErr)
