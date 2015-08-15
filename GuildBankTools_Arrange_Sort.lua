@@ -79,14 +79,12 @@ function Sort:GetSettings()
 		self.tSettings = self:GetDefaultSettings()
 	end
 	return self.tSettings
-
 end
 
 function Sort:GetDefaultSettings()
 	--Print("Sort:GetDefaultSettings")
 	local tDefaultSettings = {}
-	tDefaultSettings.eDirection = self.enumDirection.Horizontal
-	
+	tDefaultSettings.tDirection = {}	
 	return tDefaultSettings
 end
 
@@ -96,13 +94,21 @@ function Sort:RestoreSettings(tSavedSettings)
 		return
 	end
 
-	-- Valid direction
-	if tSavedSettings.eDirection ~= nil then
-		if self.enumDirection[tSavedSettings.eDirection] ~= nil then			
-			-- Accept input eDirection as new settings
-			self.tSettings.eDirection = tSavedSettings.eDirection
-			--Print("Sort: Restored eDirection=" .. self.tSettings.eDirection)
-		end		
+	-- Scan for valid guild->tab->direction data
+	if type(tSavedSettings.tDirection) == "table" then
+		for guild,tabs in pairs(tSavedSettings.tDirection) do
+			if type(tabs) == "table" then
+				for nTab,eSavedDirection in pairs(tabs) do				
+					if self.enumDirection[eSavedDirection] ~= nil then -- valid enum?
+						-- Accept input eDirection as new settings
+						self.tSettings.tDirection = self.tSettings.tDirection or {}
+						self.tSettings.tDirection[guild] = self.tSettings.tDirection[guild] or {}
+						self.tSettings.tDirection[guild][nTab] = eSavedDirection
+						--Print("Sort: Restored direction for guild " .. guild .. ", tab " .. nTab .. ": " .. eSavedDirection)
+					end		
+				end
+			end
+		end
 	end
 end
 
@@ -230,11 +236,34 @@ function Sort:DistributeBlanksSingle(tEntries, nBankSlots, fComparator, nBlanks)
 end
 
 function Sort:IsFirstSlot(nIndex)
-	local bIsFirst = self.tFirstSlots[self.tSettings.eDirection][self:GetRealIndex(nIndex)] == true
+	local bIsFirst = self.tFirstSlots[self:GetCurrentTabDirection()][self:GetRealIndex(nIndex)] == true
 --	if bIsFirst then
 --		Print("First slot identified at virtual index " .. nIndex .. ", real index " .. self:GetRealIndex(nIndex))
 --	end
 	return bIsFirst
+end
+
+
+
+function Sort:GetCurrentTabDirection()
+	local guild = GBT:GetGuild():GetName()
+	local nTab = GBT:GetCurrentTab()
+	
+	local eDefault = self.enumDirection.Horizontal	
+	
+	if self.tSettings.tDirection[guild] == nil or self.tSettings.tDirection[guild][nTab] == nil then
+		return eDefault
+	else
+		return self.tSettings.tDirection[guild][nTab]
+	end
+end
+
+function Sort:SetCurrentTabDirection(eDirection)
+	local guild = GBT:GetGuild():GetName()
+	local nTab = GBT:GetCurrentTab()
+	
+	self.tSettings.tDirection[guild] = self.tSettings.tDirection[guild] or {}	
+	self.tSettings.tDirection[guild][nTab] = eDirection
 end
 
 -- Main module operation
@@ -530,7 +559,7 @@ end
 	--[[ Vertical / horizontal index translation --]]
 	
 function Sort:GetVirtualIndex(nRealIndex)
-	if self.tSettings.eDirection == self.enumDirection.Vertical then
+	if self:GetCurrentTabDirection() == self.enumDirection.Vertical then
 		return self.tHorizontalToVertical[nRealIndex]
 	else
 		return nRealIndex
@@ -538,7 +567,7 @@ function Sort:GetVirtualIndex(nRealIndex)
 end
 
 function Sort:GetRealIndex(nVirtualIndex)
-	if self.tSettings.eDirection == self.enumDirection.Vertical then
+	if self:GetCurrentTabDirection() == self.enumDirection.Vertical then
 		return self.tVerticalToHorizontal[nVirtualIndex]
 	else
 		return nVirtualIndex
@@ -548,7 +577,7 @@ end
 function Sort:GetBankTabVirtual()	
 	local tCurrent = GBT:GetBankTab()
 	
-	if self.tSettings.eDirection == self.enumDirection.Vertical then
+	if self:GetCurrentTabDirection() == self.enumDirection.Vertical then
 		local tRemapped = {}
 		for idx,tSlot in pairs(tCurrent) do
 			tSlot.nIndex = self:GetVirtualIndex(tSlot.nIndex)
@@ -622,11 +651,11 @@ function GBT:OnSortButton_MouseExit(wndHandler, wndControl, x, y)
 end
 
 -- Settings UI events
-function GBT:OnChangeSortDirection(wndHandler, wndControl, eMouseButton)
+function GBT:OnChangeSortDirection(wndHandler, wndControl, eMouseButton)	
 	if wndControl:GetName() == "DirectionVertical" then
-		Sort.tSettings.eDirection = Sort.enumDirection.Vertical
+		Sort:SetCurrentTabDirection(Sort.enumDirection.Vertical)
 	else
-		Sort.tSettings.eDirection = Sort.enumDirection.Horizontal
+		Sort:SetCurrentTabDirection(Sort.enumDirection.Horizontal)
 	end	
 	
 	local controller = Apollo.GetPackage("GuildBankTools:Controller:Arrange").tPackage

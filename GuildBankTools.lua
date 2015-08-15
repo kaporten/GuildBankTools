@@ -79,7 +79,7 @@ function GuildBankTools:OnLoad()
 	end
 
 	-- Register for bank-tab updated events
-	Apollo.RegisterEventHandler("GuildBankTab", "OnGuildBankTab", self) -- Guild bank tab opened/changed.
+	--Apollo.RegisterEventHandler("GuildBankTab", "OnGuildBankTab", self) -- Guild bank tab opened/changed.
 	Apollo.RegisterEventHandler("GuildBankItem", "OnGuildBankItem", self) -- Guild bank tab contents changed.
 
 	-- Load form file. Toolbar is created from loaded file when GB hooked functions are called.
@@ -116,16 +116,7 @@ function GuildBankTools:OnDocLoaded()
 			Apollo.AddAddonErrorText(self, "Could not load the Settings form.")
 			return
 		end		
-		self.wndSettings:Show(false, true)
-		
-		-- Apply settings to loaded UI
-		if self.tSettings.Arrange.Sort.eDirection == "Vertical" then
-			--self.wndSettings:FindChild("DirectionHorizontal"):SetCheck(false)
-			self.wndSettings:FindChild("DirectionVertical"):SetCheck(true)
-		else
-			self.wndSettings:FindChild("DirectionHorizontal"):SetCheck(true)
-			--self.wndSettings:FindChild("DirectionVertical"):SetCheck(false)			
-		end
+		self.wndSettings:Show(false, true)		
 	end
 end
 
@@ -168,6 +159,19 @@ function GuildBankTools:Hook_GB_OnGuildBankTab(guildOwner, nTab)
 		controller:StopModules()
 		controller:UpdateModules()
 	end	
+	
+	-- Update settings UI with current-tab info 
+	GBT.wndSettings:FindChild("AppliesToGuildValue"):SetText(GBT.guildOwner:GetName())
+	GBT.wndSettings:FindChild("AppliesToTabValue"):SetText(GBT.guildOwner:GetBankTabName(GBT.nCurrentTab))
+
+	local eCurrentTabDirection = Apollo.GetPackage("GuildBankTools:Module:Arrange:Sort").tPackage:GetCurrentTabDirection()
+	if eCurrentTabDirection == "Vertical" then
+		GBT.wndSettings:FindChild("DirectionVertical"):SetCheck(true)
+		GBT.wndSettings:FindChild("DirectionHorizontal"):SetCheck(false)
+	else
+		GBT.wndSettings:FindChild("DirectionHorizontal"):SetCheck(true)
+		GBT.wndSettings:FindChild("DirectionVertical"):SetCheck(false)
+	end
 end
 
 -- Top Guild tab changes, eg. Money/Bank/Bank Permissions/Bank Management/Log.
@@ -273,6 +277,10 @@ function GuildBankTools:GetBankTabCount()
 	return self.guildOwner:GetBankTabCount()
 end
 
+function GuildBankTools:GetGuild()
+	return self.guildOwner
+end
+
 function GuildBankTools:GetCurrentTab()
 	return self.nCurrentTab
 end
@@ -282,18 +290,18 @@ end
 	--[[ Settings save/restore --]]
 
 	
--- Save addon config per character. Called by engine when performing a controlled game shutdown.
+-- Save addon config per realm. Called by engine when performing a controlled game shutdown.
 function GuildBankTools:OnSave(eType)
-	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Realm then 
 		return 
 	end
 	
 	return self.tSettings
 end
 
--- Restore addon config per character. Called by engine when loading UI.
+-- Restore addon config per realm. Called by engine when loading UI.
 function GuildBankTools:OnRestore(eType, tSavedSettings)
-	if eType ~= GameLib.CodeEnumAddonSaveLevel.Character then 
+	if eType ~= GameLib.CodeEnumAddonSaveLevel.Realm then 
 		return 
 	end
 
