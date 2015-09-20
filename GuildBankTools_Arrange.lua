@@ -157,6 +157,15 @@ end
 
 
 function Arrange:Hook_GA_OnGuildResult(guildSender, strName, nRank, eResult)	
+		
+	-- No access to tab? Allow standard error printout, then stop/update modules cleanly
+	if eResult == GuildLib.GuildResult_BankTabCannotWithdraw then
+		Arrange.Orig_GA_OnGuildResult(self, guildSender, strName, nRank, eResult)
+		Arrange:StopModules()
+		Arrange:UpdateModules()
+		return
+	end
+	
 	-- NB: In this hooked context "self" is GuildAlerts, not GuildBankTools
 	if eResult ~= GuildLib.GuildResult_Busy then
 		-- Not the busy-signal, just let GuildAlerts handle whatever it is as usual
@@ -183,6 +192,14 @@ end
 
 function Arrange:OnGuildResult(guildSender, strName, nRank, eResult)	
 	local eInProgress = Arrange:GetInProgressModule()
+	
+	-- No access to tab? Allow standard error printout, then stop/update modules cleanly
+	if eResult == GuildLib.GuildResult_BankTabCannotWithdraw then
+		Arrange:StopModules()
+		Arrange:UpdateModules()
+		return
+	end	
+	
 	if eResult == GuildLib.GuildResult_Busy and eInProgress ~= nil then
 		Arrange.nThrottleTimer = 1
 		
