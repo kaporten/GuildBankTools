@@ -274,13 +274,13 @@ function Sort:Execute()
 	
 	-- Loop through sorted list of bank-slots, process first slot with incorrect item (by id) in it
 	for idx,tSortedTargetSlot in ipairs(self.tSortedSlots) do
-
+		
 		if tSortedTargetSlot.bIsBlank == true then
 			-- Do nothing, just skip this blank slot
 		else
 			-- Find current item occupying this index
 			local tCurrentSlot = Sort:GetSlotByIndex(tCurrentSlots, idx)
-						
+			
 			-- Nothing in current slot, or current slot has different item
 			if tCurrentSlot == nil or tCurrentSlot.itemInSlot:GetItemId() ~= tSortedTargetSlot.itemInSlot:GetItemId() then
 				
@@ -311,13 +311,15 @@ function Sort:Execute()
 				--Print(string.format("Moving '%s' from index [%d] to [%d]",  tSourceSlot.itemInSlot:GetName(), self:GetRealIndex(tSourceSlot.nIndex), self:GetRealIndex(tSortedTargetSlot.nIndex)))
 
 				-- Pulse both source and target
+				--[[ :TransitionPulse() removed in Drop 6 :( ... find alternative
 				local GB = Apollo.GetAddon("GuildBank")
 				if GB ~= nil then
 					local bankwnds = GB.tWndRefs.tBankItemSlots
 					bankwnds[self:GetRealIndex(tSourceSlot.nIndex)]:TransitionPulse()
 					bankwnds[self:GetRealIndex(tSortedTargetSlot.nIndex)]:TransitionPulse()
 				end	
-				
+				--]]
+
 				-- Fire off the update by beginning and ending the bank transfer from source to target.
 				tSourceSlot.nIndex = self:GetRealIndex(tSourceSlot.nIndex)
 				GBT.guildOwner:BeginBankItemTransfer(tSourceSlot.itemInSlot, tSourceSlot.itemInSlot:GetStackCount())

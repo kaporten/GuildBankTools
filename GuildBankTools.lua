@@ -10,7 +10,7 @@ require "Window"
 	--[[ Globals and enums --]]
 
 -- Addon class itself
-local Major, Minor, Patch = 4, 2, 0
+local Major, Minor, Patch = 4, 3, 0
 local GuildBankTools = {}
 
 -- Ref to the GuildBank addon
@@ -206,6 +206,7 @@ end
 	--[[ Item changed in guildbank --]]
 	
 function GuildBankTools:OnGuildBankItem(guildOwner, nTab, nInventorySlot, itemUpdated, bRemoved)
+	--Print("OnGuildBankItem")
 	-- Ignore events if toolbar is not visible 
 	-- (don't bother updating if people change stuff while you're not at the bank)
 	if self.wndOverlayForm == nil or self.wndOverlayForm:FindChild("ContentArea") == nil or (not self.wndOverlayForm:FindChild("ContentArea"):IsShown()) then
