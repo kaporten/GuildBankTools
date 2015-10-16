@@ -85,6 +85,11 @@ function Usable:IsMatch(tSlot)
 		return false
 	end
 	
+	-- Pets have a "strSpecialFailures" spell property when they're already known
+	if tDetails.tPrimary ~= nil and tDetails.tPrimary.strSpecialFailures ~= nil then
+		return false
+	end
+	
 	-- Check item class requirement
 	if tDetails.tPrimary ~= nil and type(tDetails.tPrimary.arClassRequirement) == "table" and not tDetails.tPrimary.arClassRequirement.bRequirementMet then
 		return false
