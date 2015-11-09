@@ -36,9 +36,7 @@ function Sort:Initialize()
 	-- Comparators for individual Categories
 	-- Index is category type
 	self.tComparators_Category = {
-
 		[88] = self.Comparator_Category_Bags,
-		[130] = self.Comparator_Category_SkillAMPs,
 		[135] = self.Comparator_Category_Runes,
 	}	
 	
@@ -528,15 +526,6 @@ function Sort:Comparator_CurrentIndex(tSlotA, tSlotB)
 	return Sort:CompareValues(
 		tSlotA.nIndex, 
 		tSlotB.nIndex)
-end
-
-function Sort:Comparator_Category_SkillAMPs(tSlotA, tSlotB)		
-	local classA = tSlotA.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]
-	local classB = tSlotB.itemInSlot:GetDetailedInfo().tPrimary.arClassRequirement.arClasses[1]	
-	
-	return Sort:CompareValues(
-		classA, 
-		classB)
 end
 
 function Sort:Comparator_Category_Runes(tSlotA, tSlotB)
