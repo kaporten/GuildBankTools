@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Addon Author="porten" APIVersion="12" Name="GuildBankTools" Description="Various utilities for the guild bank">
+<Addon Author="porten" APIVersion="14" Name="GuildBankTools" Description="Various utilities for the guild bank">
 	<!-- Main form and addon control code -->
     <Form Name="GuildBankTools.xml"/>	
     <Script Name="GuildBankTools.lua"/>
